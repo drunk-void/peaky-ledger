@@ -11,7 +11,7 @@ export async function GET(request: Request) {
     }
 
     const adapter = new FyersAdapter()
-    const authUrl = adapter.getAuthUrl()
+    const authUrl = adapter.getAuthUrl(accountId)
 
     // Redirect to Fyers OAuth Page
     return NextResponse.redirect(authUrl)

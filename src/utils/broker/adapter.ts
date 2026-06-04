@@ -1,7 +1,7 @@
 import { Trade } from '@/types/journal'
 
 export interface BrokerAdapter {
-  getAuthUrl(): string
+  getAuthUrl(accountId?: string): string
   exchangeCodeForToken(code: string): Promise<{ accessToken: string; expiry: Date }>
   fetchTrades(
     accessToken: string,
@@ -23,9 +23,11 @@ export class FyersAdapter implements BrokerAdapter {
     this.redirectUri = process.env.FYERS_REDIRECT_URI || ''
   }
 
-  getAuthUrl(): string {
-    const state = 'fyers-auth-state'
-    return `https://api-t1.fyers.in/api/v3/generate-authcode?client_id=${this.appId}&redirect_uri=${encodeURIComponent(this.redirectUri)}&response_type=code&state=${state}`
+  getAuthUrl(accountId?: string): string {
+    // If accountId is provided, pass it in the state parameter.
+    // Otherwise use a default state.
+    const state = accountId ? `accountId=${accountId}` : 'fyers-auth-state'
+    return `https://api-t1.fyers.in/api/v3/generate-authcode?client_id=${this.appId}&redirect_uri=${encodeURIComponent(this.redirectUri)}&response_type=code&state=${encodeURIComponent(state)}`
   }
 
   async exchangeCodeForToken(code: string): Promise<{ accessToken: string; expiry: Date }> {
