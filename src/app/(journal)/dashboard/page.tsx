@@ -7,16 +7,16 @@ import { useJournalStore } from '@/store/useJournalStore'
 import { getTrades, getAccounts } from '@/utils/supabase/queries'
 import { calculateMetrics } from '@/utils/metrics'
 import { Trade, Account } from '@/types/journal'
+import { useCurrency } from '@/utils/useCurrency'
+import { formatCurrency } from '@/utils/currency'
 import { 
   TrendingUp, 
   Percent, 
-  Award, 
   ArrowUpRight, 
   ArrowDownRight,
   DollarSign, 
   Activity, 
-  Sparkles,
-  Layers
+  Sparkles
 } from 'lucide-react'
 import {
   AreaChart,
@@ -60,17 +60,35 @@ export default function DashboardPage() {
     fetchDashboardData()
   }, [dateRange, selectedAccountId])
 
+  const { preferredCurrency, currencySymbol, rates } = useCurrency()
+
   // Get active account starting balance
   const activeAccount = accounts.find((a) => a.id === selectedAccountId)
-  const startingBalance = activeAccount ? Number(activeAccount.starting_balance) : 100000
+  const startingBalanceRaw = activeAccount ? Number(activeAccount.starting_balance) : 100000
+  const startingBalanceCurrency = activeAccount ? activeAccount.currency : 'INR'
+  const startingBalanceRate = rates[startingBalanceCurrency.toUpperCase()] !== undefined ? rates[startingBalanceCurrency.toUpperCase()] : 1
+  const startingBalance = startingBalanceRaw * startingBalanceRate
 
-  const metrics = calculateMetrics(trades, startingBalance)
+  // Convert all trades to the preferred currency before calculating metrics
+  const convertedTrades = trades.map((t) => {
+    const rate = rates[(t.currency || 'INR').toUpperCase()] !== undefined ? rates[(t.currency || 'INR').toUpperCase()] : 1
+    return {
+      ...t,
+      entry_price: t.entry_price * rate,
+      exit_price: t.exit_price !== null ? t.exit_price * rate : null,
+      gross_pnl: t.gross_pnl !== null ? t.gross_pnl * rate : null,
+      fees: t.fees * rate,
+      net_pnl: t.net_pnl !== null ? t.net_pnl * rate : null,
+    }
+  })
+
+  const metrics = calculateMetrics(convertedTrades, startingBalance)
 
   const stats = [
     { 
       name: 'Net P&L', 
-      value: `₹${metrics.netPnL.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 
-      change: `Gross: ₹${metrics.grossPnL.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, 
+      value: formatCurrency(metrics.netPnL, preferredCurrency), 
+      change: `Gross: ${formatCurrency(metrics.grossPnL, preferredCurrency)}`, 
       isPositive: metrics.netPnL >= 0, 
       icon: DollarSign 
     },
@@ -84,14 +102,14 @@ export default function DashboardPage() {
     { 
       name: 'Profit Factor', 
       value: metrics.profitFactor === 999 ? '∞' : metrics.profitFactor.toFixed(2), 
-      change: `Expectancy: ₹${metrics.expectancy.toFixed(0)}`, 
+      change: `Expectancy: ${formatCurrency(metrics.expectancy, preferredCurrency)}`, 
       isPositive: metrics.profitFactor >= 1.5, 
       icon: TrendingUp 
     },
     { 
       name: 'Total Trades', 
       value: metrics.totalTrades.toString(), 
-      change: `Fees paid: ₹${metrics.fees.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, 
+      change: `Fees paid: ${formatCurrency(metrics.fees, preferredCurrency)}`, 
       isPositive: true, 
       icon: Activity 
     },
@@ -176,7 +194,7 @@ export default function DashboardPage() {
                   fontSize={12} 
                   tickLine={false} 
                   domain={['dataMin - 1000', 'dataMax + 1000']}
-                  tickFormatter={(v) => `₹${(v/1000).toFixed(0)}k`}
+                  tickFormatter={(v) => `${currencySymbol}${(v/1000).toFixed(0)}k`}
                 />
                 <Tooltip 
                   contentStyle={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-color)', borderRadius: '8px' }}
@@ -231,25 +249,25 @@ export default function DashboardPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', borderRight: '1px solid var(--border-color)', paddingRight: '16px' }}>
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>AVERAGE WIN</span>
             <span style={{ fontSize: '18px', fontWeight: 700, color: 'var(--success)' }}>
-              ₹{metrics.avgWin.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+              {formatCurrency(metrics.avgWin, preferredCurrency)}
             </span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', borderRight: '1px solid var(--border-color)', paddingRight: '16px' }}>
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>AVERAGE LOSS</span>
             <span style={{ fontSize: '18px', fontWeight: 700, color: 'var(--danger)' }}>
-              ₹{metrics.avgLoss.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+              {formatCurrency(metrics.avgLoss, preferredCurrency)}
             </span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', borderRight: '1px solid var(--border-color)', paddingRight: '16px' }}>
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>MAX WINNING TRADE</span>
             <span style={{ fontSize: '18px', fontWeight: 700, color: 'var(--success)' }}>
-              ₹{metrics.maxWin.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+              {formatCurrency(metrics.maxWin, preferredCurrency)}
             </span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>MAX LOSING TRADE</span>
             <span style={{ fontSize: '18px', fontWeight: 700, color: 'var(--danger)' }}>
-              ₹{metrics.maxLoss.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+              {formatCurrency(metrics.maxLoss, preferredCurrency)}
             </span>
           </div>
         </div>

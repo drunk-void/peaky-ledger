@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS public.accounts (
   currency TEXT DEFAULT 'INR',
   is_active BOOLEAN DEFAULT true,
   broker_credentials JSONB,                    -- { accessToken, appId, ... }
+  archived_at TIMESTAMPTZ DEFAULT NULL,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
@@ -219,3 +220,25 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE OR REPLACE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- Commission rule types
+CREATE TYPE public.commission_calc_type AS ENUM ('percent_of_turnover', 'flat_per_trade', 'per_unit');
+
+-- Commission rules (per-account, stackable)
+CREATE TABLE IF NOT EXISTS public.commission_rules (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  account_id UUID REFERENCES public.accounts(id) ON DELETE CASCADE NOT NULL,
+  label TEXT NOT NULL,                                -- "Brokerage", "STT", "Exchange Charges"
+  calc_type public.commission_calc_type NOT NULL,            -- how to calculate
+  value NUMERIC(15,6) NOT NULL,                       -- 0.03 (for 0.03%), 20.00 (for ₹20 flat), 0.01 (per unit)
+  applies_to TEXT[] DEFAULT '{}',                     -- asset classes: {'equity','futures'} or {} for all
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE public.commission_rules ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can access own commission rules"
+  ON public.commission_rules FOR ALL USING (auth.uid() = user_id);
+
+ALTER TABLE public.trades ADD COLUMN fees_auto_calculated BOOLEAN DEFAULT false;

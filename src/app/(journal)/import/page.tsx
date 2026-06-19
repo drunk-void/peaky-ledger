@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { getAccounts } from '@/utils/supabase/queries'
@@ -9,7 +10,8 @@ import { Database, RefreshCw, Upload, CheckCircle2, AlertTriangle, Key } from 'l
 import Papa from 'papaparse'
 import { createTrade } from '@/utils/supabase/queries'
 
-export default function ImportPage() {
+function ImportPageContent() {
+  const searchParams = useSearchParams()
   const [accounts, setAccounts] = useState<Account[]>([])
   const [selectedAccountId, setSelectedAccountId] = useState('')
   const [syncing, setSyncing] = useState(false)
@@ -29,6 +31,16 @@ export default function ImportPage() {
     fetchAccounts()
   }, [])
 
+  useEffect(() => {
+    const error = searchParams.get('error')
+    const success = searchParams.get('success')
+    if (error) {
+      setTimeout(() => setSyncMessage(error), 0)
+    } else if (success) {
+      setTimeout(() => setSyncMessage(success + ' 🎉'), 0)
+    }
+  }, [searchParams])
+
   // Sync Fyers API
   const handleFyersConnect = () => {
     // In a real flow, this redirects to the Fyers OAuth page
@@ -47,11 +59,14 @@ export default function ImportPage() {
       
       if (response.ok) {
         setSyncMessage(`Successfully synced ${resData.syncedCount} new trades! 🎉`)
+        const active = await getAccounts()
+        setAccounts(active)
       } else {
-        setSyncMessage(`Sync failed: ${resData.message || 'Check broker connection'}`)
+        setSyncMessage(`Sync failed: ${resData.error || resData.message || 'Check broker connection'}`)
       }
-    } catch (err: any) {
-      setSyncMessage(`Sync error: ${err.message || 'API unreachable'}`)
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : 'API unreachable'
+      setSyncMessage(`Sync error: ${errMsg}`)
     } finally {
       setSyncing(false)
     }
@@ -74,7 +89,7 @@ export default function ImportPage() {
       skipEmptyLines: true,
       complete: async (results) => {
         try {
-          const rows = results.data as any[]
+          const rows = results.data as Record<string, string>[]
           let count = 0
 
           for (const row of rows) {
@@ -122,8 +137,9 @@ export default function ImportPage() {
           }
 
           setImportMessage(`Successfully imported ${count} trades! 📊`)
-        } catch (err: any) {
-          setImportMessage(`Import error: ${err.message}`)
+        } catch (err: unknown) {
+          const errMsg = err instanceof Error ? err.message : 'Unknown import error'
+          setImportMessage(`Import error: ${errMsg}`)
         } finally {
           setImporting(false)
           setCsvFile(null)
@@ -134,6 +150,58 @@ export default function ImportPage() {
         setImporting(false)
       }
     })
+  }
+
+  const selectedAccount = accounts.find((acc) => acc.id === selectedAccountId)
+  const connection = selectedAccount?.broker_connections?.[0]
+  const syncStatus = connection?.sync_status || 'disconnected'
+  const lastSyncAt = connection?.last_sync_at
+
+  const getStatusConfig = (status: string) => {
+    switch (status) {
+      case 'connected':
+        return {
+          color: 'var(--success, #10b981)',
+          label: 'Connected',
+          icon: <CheckCircle2 size={14} style={{ color: 'var(--success, #10b981)' }} />
+        }
+      case 'expired':
+        return {
+          color: '#f59e0b',
+          label: 'Session Expired',
+          icon: <AlertTriangle size={14} style={{ color: '#f59e0b' }} />
+        }
+      case 'error':
+        return {
+          color: 'var(--danger, #ef4444)',
+          label: 'Sync Error',
+          icon: <AlertTriangle size={14} style={{ color: 'var(--danger, #ef4444)' }} />
+        }
+      default:
+        return {
+          color: 'var(--text-muted, #9ca3af)',
+          label: 'Not Connected',
+          icon: <Database size={14} style={{ color: 'var(--text-muted, #9ca3af)' }} />
+        }
+    }
+  }
+
+  const statusConfig = getStatusConfig(syncStatus)
+
+  const formatLastSync = (dateStr: string | null | undefined) => {
+    if (!dateStr) return ''
+    try {
+      const date = new Date(dateStr)
+      return date.toLocaleString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      })
+    } catch {
+      return ''
+    }
   }
 
   return (
@@ -171,6 +239,37 @@ export default function ImportPage() {
               ))}
             </select>
           </div>
+
+          {selectedAccount && (
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '8px', 
+              padding: '10px 12px', 
+              backgroundColor: 'var(--bg-surface-hover, rgba(0, 0, 0, 0.02))', 
+              borderRadius: '6px', 
+              border: '1px solid var(--border-color, rgba(0, 0, 0, 0.05))',
+              fontSize: '13px',
+              marginTop: '-4px'
+            }}>
+              <span style={{ color: 'var(--text-secondary)' }}>Status:</span>
+              <span style={{ 
+                display: 'inline-flex', 
+                alignItems: 'center', 
+                gap: '4px', 
+                fontWeight: 600, 
+                color: statusConfig.color 
+              }}>
+                {statusConfig.icon}
+                {statusConfig.label}
+              </span>
+              {lastSyncAt && (
+                <span style={{ color: 'var(--text-muted)', fontSize: '11px', marginLeft: 'auto' }}>
+                  Synced: {formatLastSync(lastSyncAt)}
+                </span>
+              )}
+            </div>
+          )}
 
           <div style={{ display: 'flex', gap: '12px' }}>
             <Button variant="primary" onClick={handleFyersConnect} style={{ flex: 1 }}>
@@ -237,5 +336,13 @@ export default function ImportPage() {
 
       </div>
     </div>
+  )
+}
+
+export default function ImportPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <ImportPageContent />
+    </Suspense>
   )
 }

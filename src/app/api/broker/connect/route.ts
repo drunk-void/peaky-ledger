@@ -15,7 +15,7 @@ export async function GET(request: Request) {
 
     // Redirect to Fyers OAuth Page
     return NextResponse.redirect(authUrl)
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Failed to connect broker' }, { status: 500 })
+  } catch (err: unknown) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed to connect broker' }, { status: 500 })
   }
 }

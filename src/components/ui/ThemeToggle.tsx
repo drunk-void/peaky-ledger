@@ -1,16 +1,15 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import { Sun, Moon } from 'lucide-react'
 
 export const ThemeToggle = () => {
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark')
-
-  useEffect(() => {
-    // Determine initial theme
-    const activeTheme = document.documentElement.getAttribute('data-theme') as 'light' | 'dark' || 'dark'
-    setTheme(activeTheme)
-  }, [])
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof document !== 'undefined') {
+      return (document.documentElement.getAttribute('data-theme') as 'light' | 'dark') || 'dark'
+    }
+    return 'dark'
+  })
 
   const toggleTheme = () => {
     const nextTheme = theme === 'light' ? 'dark' : 'light'

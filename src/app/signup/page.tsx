@@ -42,8 +42,8 @@ export default function SignupPage() {
       } else {
         setSuccess(true)
       }
-    } catch (err: any) {
-      setError(err?.message || 'Something went wrong')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Something went wrong')
     } finally {
       setLoading(false)
     }
@@ -142,7 +142,7 @@ export default function SignupPage() {
             </div>
             <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '8px' }}>Check your email</h2>
             <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-              We've sent a verification link to <strong>{email}</strong>. Please check your inbox to complete sign up.
+              We&apos;ve sent a verification link to <strong>{email}</strong>. Please check your inbox to complete sign up.
             </p>
             <Button
               variant="secondary"

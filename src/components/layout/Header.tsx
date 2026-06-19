@@ -4,11 +4,12 @@ import React, { useEffect, useState } from 'react'
 import { ThemeToggle } from '../ui/ThemeToggle'
 import { useJournalStore } from '@/store/useJournalStore'
 import { createClient } from '@/utils/supabase/client'
+import { Account } from '@/types/journal'
 import { User, Wallet } from 'lucide-react'
 
 export const Header = () => {
-  const { selectedAccountId, setSelectedAccountId } = useJournalStore()
-  const [accounts, setAccounts] = useState<any[]>([])
+  const { selectedAccountId, setSelectedAccountId, preferredCurrency, setPreferredCurrency } = useJournalStore()
+  const [accounts, setAccounts] = useState<Pick<Account, 'id' | 'name' | 'broker'>[]>([])
   const [userName, setUserName] = useState<string>('')
   const supabase = createClient()
 
@@ -18,6 +19,9 @@ export const Header = () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         setUserName(user.user_metadata?.full_name || user.email?.split('@')[0] || 'Trader')
+        if (user.user_metadata?.default_currency) {
+          setPreferredCurrency(user.user_metadata.default_currency)
+        }
       }
 
       // Fetch accounts
@@ -32,7 +36,7 @@ export const Header = () => {
     }
 
     fetchUserDataAndAccounts()
-  }, [supabase])
+  }, [supabase, setPreferredCurrency])
 
   return (
     <header
@@ -77,6 +81,37 @@ export const Header = () => {
 
       {/* Right side controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+        <select
+          value={preferredCurrency}
+          onChange={async (e) => {
+            const val = e.target.value
+            setPreferredCurrency(val)
+            try {
+              await supabase.auth.updateUser({
+                data: { default_currency: val }
+              })
+            } catch (err) {
+              console.error('Failed to update user profile default_currency:', err)
+            }
+          }}
+          style={{
+            padding: '6px 12px',
+            borderRadius: '6px',
+            fontSize: '13px',
+            fontWeight: 600,
+            border: '1px solid var(--border-color)',
+            backgroundColor: 'var(--bg-surface)',
+            color: 'var(--text-primary)',
+            cursor: 'pointer',
+            outline: 'none',
+          }}
+        >
+          <option value="INR">INR (₹)</option>
+          <option value="USD">USD ($)</option>
+          <option value="EUR">EUR (€)</option>
+          <option value="GBP">GBP (£)</option>
+        </select>
+
         <ThemeToggle />
         
         {/* User Badge */}

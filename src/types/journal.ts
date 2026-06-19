@@ -28,8 +28,13 @@ export interface Account {
   starting_balance: number
   currency: string
   is_active: boolean
+  archived_at?: string | null
   created_at: string
   updated_at: string
+  broker_connections?: {
+    sync_status: SyncStatus
+    last_sync_at: string | null
+  }[]
 }
 
 export interface Trade {
@@ -66,9 +71,24 @@ export interface Trade {
   r_multiple: number | null
   duration_minutes: number | null
   source: 'fyers_api' | 'csv_import' | 'manual'
+  fees_auto_calculated?: boolean
   created_at: string
   updated_at: string
   tags?: Tag[]
+}
+
+export type CommissionCalcType = 'percent_of_turnover' | 'flat_per_trade' | 'per_unit'
+
+export interface CommissionRule {
+  id: string
+  user_id: string
+  account_id: string
+  label: string
+  calc_type: CommissionCalcType
+  value: number
+  applies_to: string[]  // asset classes, empty array = all
+  is_active: boolean
+  created_at: string
 }
 
 export interface Tag {
