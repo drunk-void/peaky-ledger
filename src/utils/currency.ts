@@ -54,7 +54,7 @@ export async function getExchangeRate(from: string, to: string): Promise<number>
   }
 
   try {
-    const response = await fetch(`https://api.frankfurter.app/latest?from=${from}`)
+    const response = await fetch(`https://api.frankfurter.dev/latest?from=${from}`)
     if (!response.ok) throw new Error('API failed')
     const data = await response.json()
     

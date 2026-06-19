@@ -57,10 +57,10 @@ export async function GET(request: Request) {
         broker: 'fyers',
         sync_status: 'connected',
         last_sync_at: new Date().toISOString()
-      }, { onConflict: 'account_id' })
+      }, { onConflict: 'user_id,account_id' })
 
     if (upsertError) {
-      throw upsertError
+      throw new Error(upsertError.message || JSON.stringify(upsertError))
     }
 
     // Redirect to import page with success flag
@@ -68,6 +68,7 @@ export async function GET(request: Request) {
 
   } catch (err: unknown) {
     console.error('Broker callback error:', err)
-    return NextResponse.redirect(new URL(`/import?error=${encodeURIComponent(err instanceof Error ? err.message : 'Callback failed')}`, request.url))
+    const message = err instanceof Error ? err.message : String(err)
+    return NextResponse.redirect(new URL(`/import?error=${encodeURIComponent(message)}`, request.url))
   }
 }
