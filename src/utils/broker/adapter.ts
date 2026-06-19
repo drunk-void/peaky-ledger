@@ -41,6 +41,7 @@ export class FyersAdapter implements BrokerAdapter {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        grant_type: 'authorization_code',
         code,
         appIdHash: this.hashAppIdSecret(this.appId, appSecret),
       }),
