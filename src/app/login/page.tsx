@@ -35,8 +35,8 @@ export default function LoginPage() {
         router.push('/dashboard')
         router.refresh()
       }
-    } catch (err: any) {
-      setError(err?.message || 'Something went wrong')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Something went wrong')
     } finally {
       setLoading(false)
     }
@@ -182,7 +182,7 @@ export default function LoginPage() {
         </Button>
 
         <p style={{ fontSize: '13px', color: 'var(--text-secondary)', textAlign: 'center', marginTop: '32px' }}>
-          Don't have an account?{' '}
+          Don&apos;t have an account?{' '}
           <Link href="/signup" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'none' }}>
             Sign up
           </Link>

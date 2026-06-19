@@ -4,11 +4,14 @@ import React, { useEffect, useState } from 'react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { getDiaryEntry, upsertDiaryEntry } from '@/utils/supabase/queries'
-import { DiaryEntry } from '@/types/journal'
 import { format } from 'date-fns'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
-import { Save, Calendar as CalendarIcon, Smile, ShieldAlert } from 'lucide-react'
+import { Save, Calendar as CalendarIcon } from 'lucide-react'
+import { DiaryEntry } from '@/types/journal'
+import { createClient } from '@/utils/supabase/client'
+import ScreenshotUploader from '@/components/ui/ScreenshotUploader'
+
 
 export default function DiaryPage() {
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'))
@@ -17,6 +20,17 @@ export default function DiaryPage() {
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
+  const [currentEntry, setCurrentEntry] = useState<DiaryEntry | null>(null)
+  const [userId, setUserId] = useState<string>('')
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) setUserId(user.id)
+    }
+    fetchUser()
+  }, [])
 
   const editor = useEditor({
     extensions: [StarterKit],
@@ -29,6 +43,7 @@ export default function DiaryPage() {
       setMessage('')
       try {
         const entry = await getDiaryEntry(selectedDate)
+        setCurrentEntry(entry)
         if (entry) {
           setMood(entry.mood || '')
           setRating(entry.day_rating || '')
@@ -52,12 +67,13 @@ export default function DiaryPage() {
     setSaving(true)
     setMessage('')
     try {
-      await upsertDiaryEntry({
+      const saved = await upsertDiaryEntry({
         date: selectedDate,
         content: editor?.getHTML() || '',
         mood: mood || null,
         day_rating: rating ? Number(rating) : null,
       })
+      setCurrentEntry(saved)
       setMessage('Journal entry saved successfully! 🎉')
       setTimeout(() => setMessage(''), 3000)
     } catch (err) {
@@ -135,7 +151,7 @@ export default function DiaryPage() {
 
             {/* Performance Rating */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <label>Rate today's execution quality (1-5)</label>
+              <label>Rate today&apos;s execution quality (1-5)</label>
               <div style={{ display: 'flex', gap: '8px' }}>
                 {[1, 2, 3, 4, 5].map((val) => (
                   <button
@@ -167,7 +183,7 @@ export default function DiaryPage() {
 
           {/* Editor toolbar placeholder style */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
-            <label>Today's Reflections & Learnings</label>
+            <label>Today&apos;s Reflections & Learnings</label>
             <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden' }}>
               {/* Rich editor toolbar */}
               <div style={{ display: 'flex', gap: '8px', padding: '8px', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-surface-hover)' }}>
@@ -207,6 +223,12 @@ export default function DiaryPage() {
               <span>Save Entry</span>
             </Button>
           </div>
+
+          {currentEntry && userId && (
+            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '24px', marginTop: '12px' }}>
+              <ScreenshotUploader diaryEntryId={currentEntry.id} userId={userId} />
+            </div>
+          )}
 
         </Card>
       )}

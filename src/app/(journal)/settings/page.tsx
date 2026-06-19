@@ -5,18 +5,39 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
-import { getAccounts, createAccount, getTrades } from '@/utils/supabase/queries'
+import { getAccounts, createAccount, getTrades, getCommissionRules, createCommissionRule, deleteCommissionRule, archiveAccount, restoreAccount, deleteAccount, getArchivedAccounts } from '@/utils/supabase/queries'
 import { createClient } from '@/utils/supabase/client'
-import { Account, BrokerType } from '@/types/journal'
-import { Settings, Plus, Download, Trash, User, Wallet } from 'lucide-react'
+import { Account, BrokerType, CommissionRule, CommissionCalcType } from '@/types/journal'
+import { Settings, Plus, Download, User, Wallet, Trash2, Archive, RotateCcw } from 'lucide-react'
+import { useCurrency } from '@/utils/useCurrency'
+import { formatCurrency } from '@/utils/currency'
+import { useJournalStore } from '@/store/useJournalStore'
 import Papa from 'papaparse'
 
+interface ProfileState {
+  display_name: string
+  default_currency: string
+  email?: string
+}
+
 export default function SettingsPage() {
+  const { preferredCurrency } = useCurrency()
   const [accounts, setAccounts] = useState<Account[]>([])
-  const [profile, setProfile] = useState<any>({ display_name: '', default_currency: 'INR' })
+  const [archivedAccounts, setArchivedAccounts] = useState<Account[]>([])
+  const [profile, setProfile] = useState<ProfileState>({ display_name: '', default_currency: 'INR' })
   const [loading, setLoading] = useState(true)
   const [savingProfile, setSavingProfile] = useState(false)
   const [creatingAccount, setCreatingAccount] = useState(false)
+
+  // Commission Rules state
+  const [selectedRuleAccountId, setSelectedRuleAccountId] = useState('')
+  const [rules, setRules] = useState<CommissionRule[]>([])
+  const [ruleLabel, setRuleLabel] = useState('')
+  const [ruleCalcType, setRuleCalcType] = useState<CommissionCalcType>('percent_of_turnover')
+  const [ruleValue, setRuleValue] = useState(0)
+  const [ruleAppliesTo, setRuleAppliesTo] = useState<string[]>([])
+  const [loadingRules, setLoadingRules] = useState(false)
+  const [creatingRule, setCreatingRule] = useState(false)
 
   // Account form
   const [accName, setAccName] = useState('')
@@ -26,11 +47,37 @@ export default function SettingsPage() {
 
   const supabase = createClient()
 
-  const loadData = async () => {
-    setLoading(true)
+  const loadRules = React.useCallback(async (accountId: string) => {
+    if (!accountId) return
+    setLoadingRules(true)
+    try {
+      const activeRules = await getCommissionRules(accountId)
+      setRules(activeRules)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoadingRules(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (selectedRuleAccountId) {
+      Promise.resolve().then(() => {
+        loadRules(selectedRuleAccountId)
+      })
+    }
+  }, [selectedRuleAccountId, loadRules])
+
+  const loadData = React.useCallback(async () => {
     try {
       const activeAccounts = await getAccounts()
       setAccounts(activeAccounts)
+      if (activeAccounts.length > 0) {
+        setSelectedRuleAccountId((prev) => prev || activeAccounts[0].id)
+      }
+
+      const archived = await getArchivedAccounts()
+      setArchivedAccounts(archived)
 
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
@@ -45,11 +92,79 @@ export default function SettingsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [supabase])
 
   useEffect(() => {
-    loadData()
-  }, [])
+    Promise.resolve().then(() => {
+      loadData()
+    })
+  }, [loadData])
+
+  const handleArchiveAccount = async (id: string) => {
+    if (!confirm('Are you sure you want to archive this account? You can restore it later.')) return
+    try {
+      await archiveAccount(id)
+      loadData()
+    } catch (err) {
+      console.error(err)
+      alert('Failed to archive account.')
+    }
+  }
+
+  const handleRestoreAccount = async (id: string) => {
+    try {
+      await restoreAccount(id)
+      loadData()
+    } catch (err) {
+      console.error(err)
+      alert('Failed to restore account.')
+    }
+  }
+
+  const handleDeleteAccount = async (id: string) => {
+    if (!confirm('Are you sure you want to permanently delete this account? This action CANNOT be undone.')) return
+    try {
+      await deleteAccount(id)
+      loadData()
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : 'Delete failed'
+      alert(errMsg)
+    }
+  }
+
+  const handleAddRule = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!ruleLabel.trim() || !selectedRuleAccountId) return
+    setCreatingRule(true)
+    try {
+      await createCommissionRule({
+        account_id: selectedRuleAccountId,
+        label: ruleLabel,
+        calc_type: ruleCalcType,
+        value: ruleValue,
+        applies_to: ruleAppliesTo,
+        is_active: true,
+      })
+      setRuleLabel('')
+      setRuleValue(0)
+      setRuleAppliesTo([])
+      loadRules(selectedRuleAccountId)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setCreatingRule(false)
+    }
+  }
+
+  const handleDeleteRule = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this rule?')) return
+    try {
+      await deleteCommissionRule(id)
+      loadRules(selectedRuleAccountId)
+    } catch (err) {
+      console.error(err)
+    }
+  }
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -62,9 +177,14 @@ export default function SettingsPage() {
         }
       })
       if (error) throw error
+      
+      // Update state in journal store
+      useJournalStore.getState().setPreferredCurrency(profile.default_currency)
+      
       alert('Profile updated successfully!')
-    } catch (err: any) {
-      alert(`Error updating profile: ${err.message}`)
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : 'Unknown error'
+      alert(`Error updating profile: ${errMsg}`)
     } finally {
       setSavingProfile(false)
     }
@@ -131,8 +251,9 @@ export default function SettingsPage() {
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
-    } catch (err: any) {
-      alert(`Export failed: ${err.message}`)
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : 'Unknown error'
+      alert(`Export failed: ${errMsg}`)
     }
   }
 
@@ -204,11 +325,69 @@ export default function SettingsPage() {
               <div key={acc.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '13px' }}>
                 <div>
                   <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{acc.name}</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{acc.broker.toUpperCase()} • ₹{acc.starting_balance.toLocaleString()}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{acc.broker.toUpperCase()} • {formatCurrency(acc.starting_balance, acc.currency)}</div>
+                </div>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button
+                    onClick={() => handleArchiveAccount(acc.id)}
+                    title="Archive Account"
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      color: 'var(--text-secondary)',
+                      cursor: 'pointer',
+                      padding: '4px',
+                    }}
+                  >
+                    <Archive size={14} />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteAccount(acc.id)}
+                    title="Delete Account"
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      color: 'var(--danger)',
+                      cursor: 'pointer',
+                      padding: '4px',
+                    }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               </div>
             ))}
           </div>
+
+          {/* Archived Accounts List */}
+          {archivedAccounts.length > 0 && (
+            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '16px', marginTop: '8px' }}>
+              <h4 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px' }}>Archived Accounts</h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '120px', overflowY: 'auto' }}>
+                {archivedAccounts.map((acc) => (
+                  <div key={acc.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', border: '1px dashed var(--border-color)', borderRadius: '6px', fontSize: '12px', opacity: 0.6 }}>
+                    <div>
+                      <div style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{acc.name}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{acc.broker.toUpperCase()} • {formatCurrency(acc.starting_balance, acc.currency)}</div>
+                    </div>
+                    <button
+                      onClick={() => handleRestoreAccount(acc.id)}
+                      title="Restore Account"
+                      style={{
+                        border: 'none',
+                        background: 'transparent',
+                        color: 'var(--primary)',
+                        cursor: 'pointer',
+                        padding: '4px',
+                      }}
+                    >
+                      <RotateCcw size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <form onSubmit={handleCreateAccount} style={{ display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
             <h4 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>Add Trading Account</h4>
@@ -221,7 +400,7 @@ export default function SettingsPage() {
               required
             />
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
               <Select
                 id="accBroker"
                 value={accBroker}
@@ -237,6 +416,17 @@ export default function SettingsPage() {
                 value={accBalance}
                 onChange={(e) => setAccBalance(Number(e.target.value))}
                 required
+              />
+              <Select
+                id="accCurrency"
+                value={accCurrency}
+                onChange={(e) => setAccCurrency(e.target.value)}
+                options={[
+                  { value: 'INR', label: 'INR' },
+                  { value: 'USD', label: 'USD' },
+                  { value: 'EUR', label: 'EUR' },
+                  { value: 'GBP', label: 'GBP' }
+                ]}
               />
             </div>
 
@@ -262,6 +452,132 @@ export default function SettingsPage() {
             <Download size={16} />
             <span>Export Trade Ledger (CSV)</span>
           </Button>
+        </Card>
+
+        {/* Commission Rules */}
+        <Card style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+            <Settings size={18} style={{ color: 'var(--primary)' }} />
+            <h3 style={{ fontSize: '16px', fontWeight: 700 }}>Commission Rules</h3>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <label>Select Trading Account</label>
+            <select
+              value={selectedRuleAccountId}
+              onChange={(e) => setSelectedRuleAccountId(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                borderRadius: '8px',
+                border: '1px solid var(--border-color)',
+                backgroundColor: 'var(--bg-surface)',
+                color: 'var(--text-primary)',
+                fontSize: '14px',
+              }}
+            >
+              {accounts.map((acc) => (
+                <option key={acc.id} value={acc.id}>
+                  {acc.name} ({acc.broker})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Existing Rules List */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '180px', overflowY: 'auto' }}>
+            {loadingRules ? (
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Loading rules...</div>
+            ) : rules.length === 0 ? (
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>No rules set for this account.</div>
+            ) : (
+              rules.map((rule) => (
+                <div key={rule.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '12px' }}>
+                  <div>
+                    <div style={{ fontWeight: 600 }}>{rule.label}</div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>
+                      {rule.calc_type === 'percent_of_turnover' ? `${rule.value}% of Turnover` : rule.calc_type === 'flat_per_trade' ? `${formatCurrency(rule.value, preferredCurrency)} Flat` : `${formatCurrency(rule.value, preferredCurrency)}/unit`}
+                      {rule.applies_to.length > 0 && ` • Applies to: ${rule.applies_to.join(', ')}`}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteRule(rule.id)}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      color: 'var(--danger)',
+                      cursor: 'pointer',
+                      padding: '4px',
+                    }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Add Rule Form */}
+          <form onSubmit={handleAddRule} style={{ display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
+            <h4 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>Add Commission Rule</h4>
+            
+            <Input
+              id="ruleLabel"
+              placeholder="e.g. Brokerage / GST"
+              value={ruleLabel}
+              onChange={(e) => setRuleLabel(e.target.value)}
+              required
+            />
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <Select
+                id="ruleCalcType"
+                value={ruleCalcType}
+                onChange={(e) => setRuleCalcType(e.target.value as CommissionCalcType)}
+                options={[
+                  { value: 'percent_of_turnover', label: '% Turnover' },
+                  { value: 'flat_per_trade', label: 'Flat Fee' },
+                  { value: 'per_unit', label: 'Per Unit' }
+                ]}
+              />
+              <Input
+                id="ruleValue"
+                type="number"
+                step="0.000001"
+                value={ruleValue}
+                onChange={(e) => setRuleValue(Number(e.target.value))}
+                required
+              />
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>Applies To (Asset Classes)</span>
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                {['equity', 'futures', 'options', 'forex'].map((ac) => (
+                  <label key={ac} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={ruleAppliesTo.includes(ac)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setRuleAppliesTo([...ruleAppliesTo, ac])
+                        } else {
+                          setRuleAppliesTo(ruleAppliesTo.filter((x) => x !== ac))
+                        }
+                      }}
+                    />
+                    <span style={{ textTransform: 'capitalize' }}>{ac}</span>
+                  </label>
+                ))}
+              </div>
+              <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>*Leave unchecked to apply to all asset classes.</span>
+            </div>
+
+            <Button type="submit" variant="secondary" loading={creatingRule}>
+              <Plus size={14} />
+              <span>Add Rule</span>
+            </Button>
+          </form>
         </Card>
 
       </div>

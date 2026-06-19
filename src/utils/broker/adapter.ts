@@ -1,3 +1,4 @@
+import crypto from 'crypto'
 import { Trade } from '@/types/journal'
 
 export interface BrokerAdapter {
@@ -81,15 +82,30 @@ export class FyersAdapter implements BrokerAdapter {
       },
     })
 
-    const resData = await response.json()
+    if (!response.ok) {
+      const text = await response.text()
+      console.error(`Fyers API returned HTTP ${response.status}:`, text)
+      throw new Error(`Fyers API returned HTTP ${response.status}: ${text || response.statusText}`)
+    }
+
+    let resData: { s: string; message?: string; data?: FyersTradeRecord[] }
+    try {
+      resData = await response.json()
+    } catch {
+      const text = await response.text()
+      console.error(`Failed to parse Fyers API response as JSON:`, text)
+      throw new Error(`Invalid JSON response from Fyers API: ${text.substring(0, 100)}`)
+    }
+
     if (resData.s !== 'ok') {
-      throw new Error(resData.message || 'Failed to fetch trade history')
+      console.error(`Fyers API error response:`, resData)
+      throw new Error(resData.message || `Fyers API error: status ${resData.s}`)
     }
 
     const rawTrades = resData.data || []
     
     // Map Fyers trade fields to our standard Trade type
-    return rawTrades.map((t: any) => {
+    return rawTrades.map((t) => {
       const side: 'LONG' | 'SHORT' = t.side === 1 ? 'LONG' : 'SHORT'
       
       return {
@@ -114,7 +130,6 @@ export class FyersAdapter implements BrokerAdapter {
 
   private hashAppIdSecret(appId: string, secret: string): string {
     // SHA256 of appId + ":" + secret
-    const crypto = require('crypto')
     return crypto.createHash('sha256').update(`${appId}:${secret}`).digest('hex')
   }
 
@@ -137,4 +152,16 @@ export class FyersAdapter implements BrokerAdapter {
     // Let's replace month abbreviations and build a clean date
     return new Date(dateTimeStr).toISOString()
   }
+}
+
+interface FyersTradeRecord {
+  tradeNumber: string
+  symbol: string
+  description?: string
+  segment: number
+  exchange: number
+  side: number
+  traded_qty: number | string
+  trade_price: number | string
+  orderDateTime: string
 }

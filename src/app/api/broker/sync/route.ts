@@ -22,14 +22,23 @@ export async function GET(request: Request) {
       .eq('account_id', accountId)
       .single()
 
-    if (connError || !connection || !connection.access_token) {
+    if (connError) {
+      console.error('Error fetching broker connection from DB:', connError)
+      return NextResponse.json({ error: `Broker connection fetch failed: ${connError.message}` }, { status: 400 })
+    }
+
+    if (!connection || !connection.access_token) {
       return NextResponse.json({ error: 'No active broker connection found. Please authorize first.' }, { status: 400 })
     }
+
+    // Decrypt the token for usage
+    const { decrypt } = await import('@/utils/encryption')
+    const decryptedToken = decrypt(connection.access_token)
 
     // 2. Fetch trades from Fyers
     const adapter = new FyersAdapter()
     const rawTrades = await adapter.fetchTrades(
-      connection.access_token,
+      decryptedToken,
       process.env.FYERS_APP_ID || '',
       { fromDate, toDate }
     )
@@ -58,6 +67,8 @@ export async function GET(request: Request) {
 
       if (!insertError) {
         syncedCount++
+      } else {
+        console.error('Failed to insert trade:', insertError)
       }
     }
 
@@ -68,7 +79,8 @@ export async function GET(request: Request) {
       .eq('account_id', accountId)
 
     return NextResponse.json({ success: true, syncedCount })
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Sync failed' }, { status: 500 })
+  } catch (err: unknown) {
+    console.error('Sync API Route Error:', err)
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Sync failed' }, { status: 500 })
   }
 }

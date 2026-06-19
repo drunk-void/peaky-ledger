@@ -7,12 +7,12 @@ import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { getPlaybookEntries, createPlaybookEntry, updatePlaybookEntry, deletePlaybookEntry } from '@/utils/supabase/queries'
 import { PlaybookEntry } from '@/types/journal'
-import { Plus, Trash2, Edit3, BookMarked, Sparkles } from 'lucide-react'
-import { useEditor, EditorContent } from '@tiptap/react'
+import { Plus, Trash2, Edit3, BookMarked } from 'lucide-react'
+import { useEditor, EditorContent, Editor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 
 // Simple Editor Toolbar Component
-const EditorToolbar = ({ editor }: { editor: any }) => {
+const EditorToolbar = ({ editor }: { editor: Editor | null }) => {
   if (!editor) return null
 
   return (
@@ -67,7 +67,6 @@ export default function PlaybookPage() {
   })
 
   const fetchEntries = async () => {
-    setLoading(true)
     try {
       const data = await getPlaybookEntries()
       setEntries(data)
@@ -79,7 +78,9 @@ export default function PlaybookPage() {
   }
 
   useEffect(() => {
-    fetchEntries()
+    Promise.resolve().then(() => {
+      fetchEntries()
+    })
   }, [])
 
   const handleOpenAdd = () => {

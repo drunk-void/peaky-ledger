@@ -43,13 +43,17 @@ export async function GET(request: Request) {
       return NextResponse.redirect(new URL('/import?error=Not+authenticated', request.url))
     }
 
+    // Encrypt the access token for storage security
+    const { encrypt } = await import('@/utils/encryption')
+    const encryptedToken = encrypt(accessToken)
+
     // Upsert broker connection
     const { error: upsertError } = await supabase
       .from('broker_connections')
       .upsert({
         account_id: accountId,
         user_id: user.id,
-        access_token: accessToken,
+        access_token: encryptedToken,
         broker: 'fyers',
         sync_status: 'connected',
         last_sync_at: new Date().toISOString()
@@ -62,8 +66,8 @@ export async function GET(request: Request) {
     // Redirect to import page with success flag
     return NextResponse.redirect(new URL('/import?success=Broker+connected', request.url))
 
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Broker callback error:', err)
-    return NextResponse.redirect(new URL(`/import?error=${encodeURIComponent(err.message || 'Callback failed')}`, request.url))
+    return NextResponse.redirect(new URL(`/import?error=${encodeURIComponent(err instanceof Error ? err.message : 'Callback failed')}`, request.url))
   }
 }

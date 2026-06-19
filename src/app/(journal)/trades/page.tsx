@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -11,20 +11,33 @@ import {
   Plus, 
   Trash2, 
   Edit3, 
-  Calendar as CalendarIcon, 
-  Filter, 
-  Tag as TagIcon,
-  Smile,
+  Filter,
   TrendingUp
 } from 'lucide-react'
-import { getTrades, createTrade, updateTrade, deleteTrade, getAccounts, getTags, createTag, createAccount } from '@/utils/supabase/queries'
-import { Trade, Account, Tag, AssetClass, TradeSide, TradeEmotion } from '@/types/journal'
+import { getTrades, createTrade, updateTrade, deleteTrade, getAccounts, getTags, createTag, createAccount, getCommissionRules } from '@/utils/supabase/queries'
+import { Trade, Account, Tag, AssetClass, TradeSide, TradeEmotion, CommissionRule } from '@/types/journal'
+import { calculateCommission } from '@/utils/commission'
+import { useCurrency } from '@/utils/useCurrency'
 import { format } from 'date-fns'
+import ScreenshotUploader from '@/components/ui/ScreenshotUploader'
+import { createClient } from '@/utils/supabase/client'
+
 
 export default function TradesPage() {
+  const { formatAmount } = useCurrency()
   const [trades, setTrades] = useState<Trade[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
   const [tags, setTags] = useState<Tag[]>([])
+  const [userId, setUserId] = useState<string>('')
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) setUserId(user.id)
+    }
+    fetchUser()
+  }, [])
   
   // Filtering states
   const [selectedAccount, setSelectedAccount] = useState('all')
@@ -56,13 +69,46 @@ export default function TradesPage() {
   const [formSelectedTags, setFormSelectedTags] = useState<string[]>([])
   const [newTagName, setNewTagName] = useState('')
   
+  // Commission System states
+  const [feesAutoCalculated, setFeesAutoCalculated] = useState(true)
+  const [activeRules, setActiveRules] = useState<CommissionRule[]>([])
+  
   // Loading & error states
   const [loading, setLoading] = useState(true)
   const [submitLoading, setSubmitLoading] = useState(false)
 
+  // Fetch commission rules when formAccountId changes
+  useEffect(() => {
+    if (formAccountId) {
+      const fetchRules = async () => {
+        try {
+          const rules = await getCommissionRules(formAccountId)
+          setActiveRules(rules)
+        } catch (e) {
+          console.error(e)
+        }
+      }
+      fetchRules()
+    }
+  }, [formAccountId])
+
+  // Recalculate auto-commission when parameters change
+  useEffect(() => {
+    if (feesAutoCalculated) {
+      const calcFees = calculateCommission(activeRules, {
+        entry_price: formEntryPrice,
+        exit_price: formExitPrice === '' ? null : Number(formExitPrice),
+        quantity: formQuantity,
+        asset_class: formAssetClass,
+      })
+      Promise.resolve().then(() => {
+        setFormFees(calcFees)
+      })
+    }
+  }, [feesAutoCalculated, activeRules, formEntryPrice, formExitPrice, formQuantity, formAssetClass])
+
   // Fetch initial data
-  const fetchData = async () => {
-    setLoading(true)
+  const fetchData = useCallback(async () => {
     try {
       const activeAccounts = await getAccounts()
       setAccounts(activeAccounts)
@@ -98,11 +144,13 @@ export default function TradesPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [selectedAccount, selectedAssetClass, selectedStatus, selectedSide])
 
   useEffect(() => {
-    fetchData()
-  }, [selectedAccount, selectedAssetClass, selectedStatus, selectedSide])
+    Promise.resolve().then(() => {
+      fetchData()
+    })
+  }, [fetchData])
 
   const handleOpenAddModal = () => {
     // Reset Form
@@ -115,6 +163,7 @@ export default function TradesPage() {
     setFormEntryTime(format(new Date(), "yyyy-MM-dd'T'HH:mm"))
     setFormExitTime('')
     setFormFees(0)
+    setFeesAutoCalculated(true)
     setFormSetup('')
     setFormNotes('')
     setFormEmotion('')
@@ -161,6 +210,7 @@ export default function TradesPage() {
         status: exitPriceVal ? 'CLOSED' : 'OPEN',
         gross_pnl: null,
         fees: Number(formFees),
+        fees_auto_calculated: feesAutoCalculated,
         net_pnl: null,
         currency: 'INR',
         strike_price: null,
@@ -202,6 +252,7 @@ export default function TradesPage() {
     setFormEntryTime(format(new Date(trade.entry_time), "yyyy-MM-dd'T'HH:mm"))
     setFormExitTime(trade.exit_time ? format(new Date(trade.exit_time), "yyyy-MM-dd'T'HH:mm") : '')
     setFormFees(trade.fees)
+    setFeesAutoCalculated(trade.fees_auto_calculated ?? false)
     setFormSetup(trade.setup ?? '')
     setFormNotes(trade.notes ?? '')
     setFormEmotion(trade.emotion ?? '')
@@ -241,6 +292,7 @@ export default function TradesPage() {
         status: exitPriceVal ? 'CLOSED' : 'OPEN',
         gross_pnl: grossPnL,
         fees: Number(formFees),
+        fees_auto_calculated: feesAutoCalculated,
         net_pnl: netPnL,
         setup: formSetup || null,
         notes: formNotes || null,
@@ -394,10 +446,10 @@ export default function TradesPage() {
                       </Badge>
                     </td>
                     <td>{trade.quantity}</td>
-                    <td>₹{Number(trade.entry_price).toFixed(2)}</td>
-                    <td>{trade.exit_price ? `₹${Number(trade.exit_price).toFixed(2)}` : '—'}</td>
+                    <td>{formatAmount(Number(trade.entry_price), trade.currency)}</td>
+                    <td>{trade.exit_price ? formatAmount(Number(trade.exit_price), trade.currency) : '—'}</td>
                     <td style={{ fontWeight: 600, color: trade.exit_price ? (isProfit ? 'var(--success)' : 'var(--danger)') : 'var(--text-secondary)' }}>
-                      {trade.exit_price ? `${isProfit ? '+' : ''}₹${Number(trade.net_pnl).toFixed(2)}` : 'Open'}
+                      {trade.exit_price ? `${isProfit ? '+' : ''}${formatAmount(Number(trade.net_pnl), trade.currency)}` : 'Open'}
                     </td>
                     <td style={{ fontSize: '13px' }}>{trade.setup || '—'}</td>
                     <td style={{ fontSize: '13px' }}>{format(new Date(trade.entry_time), 'dd MMM yy')}</td>
@@ -525,15 +577,54 @@ export default function TradesPage() {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <Input
-              id="formFees"
-              label="Brokerage & Fees"
-              type="number"
-              value={formFees}
-              onChange={(e) => setFormFees(Number(e.target.value))}
-              min="0"
-              step="any"
-            />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <Input
+                id="formFees"
+                label="Brokerage & Fees"
+                type="number"
+                value={formFees}
+                onChange={(e) => {
+                  setFormFees(Number(e.target.value))
+                  setFeesAutoCalculated(false)
+                }}
+                min="0"
+                step="any"
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', marginTop: '-8px', padding: '0 4px' }}>
+                {feesAutoCalculated ? (
+                  <span style={{ color: 'var(--success)' }}>✓ Auto-calculated</span>
+                ) : (
+                  <span style={{ color: '#f59e0b' }}>⚠ Manual override active</span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !feesAutoCalculated
+                    setFeesAutoCalculated(next)
+                    if (next) {
+                      const calcFees = calculateCommission(activeRules, {
+                        entry_price: formEntryPrice,
+                        exit_price: formExitPrice === '' ? null : Number(formExitPrice),
+                        quantity: formQuantity,
+                        asset_class: formAssetClass,
+                      })
+                      setFormFees(calcFees)
+                    }
+                  }}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--primary)',
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                    padding: 0,
+                    fontSize: '11px'
+                  }}
+                >
+                  {feesAutoCalculated ? 'Manual Override' : 'Reset to Auto'}
+                </button>
+              </div>
+            </div>
             <Input
               id="formSetup"
               label="Setup Name"
@@ -658,6 +749,10 @@ export default function TradesPage() {
               }}
             />
           </div>
+
+          {isEditModalOpen && selectedTrade && userId && (
+            <ScreenshotUploader tradeId={selectedTrade.id} userId={userId} />
+          )}
 
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '12px' }}>
             <Button type="button" variant="secondary" onClick={() => { setIsAddModalOpen(false); setIsEditModalOpen(false); }}>

@@ -11,8 +11,7 @@ import {
   BookMarked,
   Database,
   Settings,
-  LogOut,
-  TrendingDown
+  LogOut
 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 

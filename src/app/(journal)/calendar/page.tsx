@@ -9,7 +9,6 @@ import {
   startOfMonth, 
   endOfMonth, 
   eachDayOfInterval, 
-  isSameMonth, 
   isSameDay, 
   addMonths, 
   subMonths,
@@ -18,19 +17,18 @@ import {
 import { ChevronLeft, ChevronRight, BookOpen, Calendar as CalendarIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import Link from 'next/link'
+import { useCurrency } from '@/utils/useCurrency'
 
 export default function CalendarPage() {
+  const { formatAmount, rates, preferredCurrency } = useCurrency()
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [trades, setTrades] = useState<Trade[]>([])
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date())
-  const [selectedDayTrades, setSelectedDayTrades] = useState<Trade[]>([])
   const [selectedDayDiary, setSelectedDayDiary] = useState<DiaryEntry | null>(null)
-  const [loading, setLoading] = useState(true)
 
   // Fetch trades for the current month
   useEffect(() => {
     const fetchMonthTrades = async () => {
-      setLoading(true)
       try {
         const fromDateStr = format(startOfMonth(currentMonth), 'yyyy-MM-dd')
         const toDateStr = format(endOfMonth(currentMonth), 'yyyy-MM-dd')
@@ -42,22 +40,15 @@ export default function CalendarPage() {
         setTrades(fetched)
       } catch (err) {
         console.error(err)
-      } finally {
-        setLoading(false)
       }
     }
 
     fetchMonthTrades()
   }, [currentMonth])
 
-  // Update selected day details
+  // Update selected day diary
   useEffect(() => {
     if (!selectedDate) return
-
-    const dayTrades = trades.filter((t) => 
-      t.entry_time && isSameDay(new Date(t.entry_time), selectedDate)
-    )
-    setSelectedDayTrades(dayTrades)
 
     const fetchDiary = async () => {
       try {
@@ -69,7 +60,20 @@ export default function CalendarPage() {
       }
     }
     fetchDiary()
-  }, [selectedDate, trades])
+  }, [selectedDate])
+
+  const convertedTrades = trades.map((t) => {
+    const rate = rates[(t.currency || 'INR').toUpperCase()] !== undefined ? rates[(t.currency || 'INR').toUpperCase()] : 1
+    return {
+      ...t,
+      net_pnl: t.net_pnl !== null ? t.net_pnl * rate : null,
+      currency: preferredCurrency
+    }
+  })
+
+  const selectedDayTrades = selectedDate
+    ? convertedTrades.filter((t) => t.entry_time && isSameDay(new Date(t.entry_time), selectedDate))
+    : []
 
   const monthStart = startOfMonth(currentMonth)
   const monthEnd = endOfMonth(currentMonth)
@@ -129,7 +133,7 @@ export default function CalendarPage() {
             {/* Render actual days */}
             {daysInMonth.map((day) => {
               const dateStr = format(day, 'yyyy-MM-dd')
-              const dayTrades = trades.filter((t) => t.entry_time && isSameDay(new Date(t.entry_time), day))
+              const dayTrades = convertedTrades.filter((t) => t.entry_time && isSameDay(new Date(t.entry_time), day))
               
               // Calculate day P&L
               const dayNetPnL = dayTrades.reduce((acc, t) => acc + (t.net_pnl || 0), 0)
@@ -175,7 +179,7 @@ export default function CalendarPage() {
                       alignSelf: 'stretch',
                       textAlign: 'right'
                     }}>
-                      {isProfit ? '+' : ''}₹{dayNetPnL.toFixed(0)}
+                      {isProfit ? '+' : ''}{formatAmount(dayNetPnL, preferredCurrency)}
                     </span>
                   )}
                 </button>
@@ -220,7 +224,7 @@ export default function CalendarPage() {
                         <span style={{ marginLeft: '8px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)' }}>{t.side}</span>
                       </div>
                       <span style={{ fontWeight: 700, color: isProfit ? 'var(--success)' : 'var(--danger)' }}>
-                        {isProfit ? '+' : ''}₹{Number(t.net_pnl).toFixed(2)}
+                        {isProfit ? '+' : ''}{formatAmount(Number(t.net_pnl), t.currency)}
                       </span>
                     </div>
                   )
