@@ -11,6 +11,8 @@ export interface BrokerAdapter {
       fromDate: string
       toDate: string
       symbol?: string
+      segmentType?: string
+      exchangeType?: string
     }
   ): Promise<Partial<Trade>[]>
 }
@@ -68,45 +70,61 @@ export class FyersAdapter implements BrokerAdapter {
       fromDate: string
       toDate: string
       symbol?: string
+      segmentType?: string
+      exchangeType?: string
     }
   ): Promise<Partial<Trade>[]> {
-    // Call the Trade History endpoint
-    // Endpoint: /api/v3/trade-history?exchange_type=0&from_date=2025-04-01&to_date=2025-12-22&page_no=1&page_size=10&segment_type=0&symbol=NSE:SUZLON-A-EQ
-    // Note: exchange_type and segment_type are query parameters. We default them to equity/FO segments (0 or 1).
     const symbolParam = params.symbol ? `&symbol=${encodeURIComponent(params.symbol)}` : ''
+    const segmentType = params.segmentType || '0'
+    const exchangeType = params.exchangeType || '0'
+    const statusParam = '&status=1'
     
-    const url = `https://api-t1.fyers.in/api/v3/trade-history?exchange_type=0&from_date=${params.fromDate}&to_date=${params.toDate}&page_no=1&page_size=100&segment_type=0${symbolParam}`
+    let allTrades: FyersTradeRecord[] = []
+    let pageNo = 1
+    const pageSize = 100
+    let hasMore = true
 
-    const response = await fetch(url, {
-      headers: {
-        'Authorization': `${appId}:${accessToken}`,
-      },
-    })
+    while (hasMore) {
+      const url = `https://api-t1.fyers.in/api/v3/trade-history?exchange_type=${exchangeType}&from_date=${params.fromDate}&to_date=${params.toDate}&page_no=${pageNo}&page_size=${pageSize}&segment_type=${segmentType}${symbolParam}${statusParam}`
 
-    if (!response.ok) {
-      const text = await response.text()
-      console.error(`Fyers API returned HTTP ${response.status}:`, text)
-      throw new Error(`Fyers API returned HTTP ${response.status}: ${text || response.statusText}`)
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `${appId}:${accessToken}`,
+        },
+      })
+
+      if (!response.ok) {
+        const text = await response.text()
+        console.error(`Fyers API returned HTTP ${response.status}:`, text)
+        throw new Error(`Fyers API returned HTTP ${response.status}: ${text || response.statusText}`)
+      }
+
+      let resData: { s: string; message?: string; data?: FyersTradeRecord[] }
+      try {
+        resData = await response.json()
+      } catch {
+        const text = await response.text()
+        console.error(`Failed to parse Fyers API response as JSON:`, text)
+        throw new Error(`Invalid JSON response from Fyers API: ${text.substring(0, 100)}`)
+      }
+
+      if (resData.s !== 'ok') {
+        console.error(`Fyers API error response:`, resData)
+        throw new Error(resData.message || `Fyers API error: status ${resData.s}`)
+      }
+
+      const rawTrades = resData.data || []
+      allTrades = allTrades.concat(rawTrades)
+
+      if (rawTrades.length < pageSize) {
+        hasMore = false
+      } else {
+        pageNo++
+      }
     }
 
-    let resData: { s: string; message?: string; data?: FyersTradeRecord[] }
-    try {
-      resData = await response.json()
-    } catch {
-      const text = await response.text()
-      console.error(`Failed to parse Fyers API response as JSON:`, text)
-      throw new Error(`Invalid JSON response from Fyers API: ${text.substring(0, 100)}`)
-    }
-
-    if (resData.s !== 'ok') {
-      console.error(`Fyers API error response:`, resData)
-      throw new Error(resData.message || `Fyers API error: status ${resData.s}`)
-    }
-
-    const rawTrades = resData.data || []
-    
     // Map Fyers trade fields to our standard Trade type
-    return rawTrades.map((t) => {
+    return allTrades.map((t) => {
       const side: 'LONG' | 'SHORT' = t.side === 1 ? 'LONG' : 'SHORT'
       
       return {

@@ -1,0 +1,47 @@
+# Peaky Ledger — Windsurf Rules
+
+## Project Context
+
+Read `CODEBASE.md` in the project root for complete architecture, schema, and conventions.
+
+## Quick Facts
+
+| Key | Value |
+|---|---|
+| Framework | Next.js 16.2.7 (App Router) — **breaking changes from older versions** |
+| UI | React 19.2.4 |
+| Language | TypeScript 5 (strict) |
+| Database | Supabase (Postgres + Auth + Storage + RLS) |
+| State | Zustand 5 (persisted) |
+| Styling | Vanilla CSS with HSL design tokens — **NO TAILWIND** |
+| Path Alias | `@/*` → `./src/*` |
+
+## Architecture Rules
+
+1. All pages in `src/app/(journal)/` are `'use client'` components
+2. All DB queries go through `src/utils/supabase/queries.ts`
+3. Browser Supabase client: `src/utils/supabase/client.ts`
+4. Server Supabase client: `src/utils/supabase/server.ts`
+5. Middleware is `src/proxy.ts` (not `middleware.ts`)
+6. Types centralized in `src/types/journal.ts`
+7. Single Zustand store in `src/store/useJournalStore.ts`
+8. CSS in `src/app/globals.css` — use CSS custom properties, not hardcoded values
+9. Broker integrations implement `BrokerAdapter` interface from `src/utils/broker/adapter.ts`
+10. API routes under `src/app/api/broker/` handle server-side broker operations
+
+## Forbidden Patterns
+
+- Tailwind CSS or any CSS framework
+- CSS modules
+- Direct `@supabase/supabase-js` imports (use wrappers)
+- `getServerSideProps` / `getStaticProps` (App Router only)
+- Hardcoded color values (use CSS custom properties)
+- Database queries outside of `queries.ts`
+- New middleware files (extend `proxy.ts`)
+
+## Reference Docs
+
+- `CODEBASE.md` — complete codebase context
+- `AGENTS.md` — agent rules
+- `docs/architecture.md` — system design
+- `supabase/schema.sql` — database schema
