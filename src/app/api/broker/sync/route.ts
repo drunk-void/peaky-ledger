@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { FyersAdapter } from '@/utils/broker/adapter'
+import { Trade } from '@/types/journal'
 
 export async function GET(request: Request) {
   try {
@@ -10,6 +11,7 @@ export async function GET(request: Request) {
     const toDate = searchParams.get('toDate') || '2025-12-31'
     const segmentType = searchParams.get('segmentType') || undefined
     const exchangeType = searchParams.get('exchangeType') || undefined
+    const syncMode = searchParams.get('syncMode') || 'trades'
 
     if (!accountId) {
       return NextResponse.json({ error: 'accountId is required' }, { status: 400 })
@@ -37,13 +39,28 @@ export async function GET(request: Request) {
     const { decrypt } = await import('@/utils/encryption')
     const decryptedToken = decrypt(connection.access_token)
 
-    // 2. Fetch trades from Fyers
+    // 2. Fetch data from Fyers
     const adapter = new FyersAdapter()
-    const rawTrades = await adapter.fetchTrades(
-      decryptedToken,
-      process.env.FYERS_APP_ID || '',
-      { fromDate, toDate, segmentType, exchangeType }
-    )
+    let rawTrades: Partial<Trade>[] = []
+
+    if (syncMode === 'pnl' && adapter.fetchRealisedPnL) {
+      rawTrades = await adapter.fetchRealisedPnL(
+        decryptedToken,
+        process.env.FYERS_APP_ID || '',
+        { fromDate, toDate, segmentType, exchangeType }
+      )
+    } else if (syncMode === 'positions' && adapter.fetchPositions) {
+      rawTrades = await adapter.fetchPositions(
+        decryptedToken,
+        process.env.FYERS_APP_ID || ''
+      )
+    } else {
+      rawTrades = await adapter.fetchTrades(
+        decryptedToken,
+        process.env.FYERS_APP_ID || '',
+        { fromDate, toDate, segmentType, exchangeType }
+      )
+    }
 
     let syncedCount = 0
 

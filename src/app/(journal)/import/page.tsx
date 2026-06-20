@@ -28,6 +28,7 @@ function ImportPageContent() {
   const [toDate, setToDate] = useState(() => new Date().toISOString().split('T')[0])
   const [segmentType, setSegmentType] = useState('0')
   const [exchangeType, setExchangeType] = useState('0')
+  const [syncMode, setSyncMode] = useState('trades')
 
   useEffect(() => {
     const fetchAccounts = async () => {
@@ -63,7 +64,7 @@ function ImportPageContent() {
     setSyncMessage('')
 
     try {
-      const response = await fetch(`/api/broker/sync?accountId=${selectedAccountId}&fromDate=${fromDate}&toDate=${toDate}&segmentType=${segmentType}&exchangeType=${exchangeType}`)
+      const response = await fetch(`/api/broker/sync?accountId=${selectedAccountId}&fromDate=${fromDate}&toDate=${toDate}&segmentType=${segmentType}&exchangeType=${exchangeType}&syncMode=${syncMode}`)
       const resData = await response.json()
       
       if (response.ok) {
@@ -262,6 +263,14 @@ function ImportPageContent() {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 }}>Sync Mode</label>
+              <select value={syncMode} onChange={(e) => setSyncMode(e.target.value)} style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-surface)' }}>
+                <option value="trades">Trade Fills History</option>
+                <option value="pnl">Realised P&L History</option>
+                <option value="positions">Today's Positions</option>
+              </select>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 }}>Segment Type</label>
               <select value={segmentType} onChange={(e) => setSegmentType(e.target.value)} style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-surface)' }}>
                 <option value="0">All Segments (0)</option>
@@ -270,6 +279,9 @@ function ImportPageContent() {
                 <option value="12">Currency (12)</option>
               </select>
             </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 }}>Exchange</label>
               <select value={exchangeType} onChange={(e) => setExchangeType(e.target.value)} style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-surface)' }}>
