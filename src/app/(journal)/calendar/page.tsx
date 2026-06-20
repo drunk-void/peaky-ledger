@@ -26,11 +26,11 @@ export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date())
   const [selectedDayDiary, setSelectedDayDiary] = useState<DiaryEntry | null>(null)
 
-  // Fetch trades for the current month
+  // Fetch trades for the past 12 months
   useEffect(() => {
-    const fetchMonthTrades = async () => {
+    const fetchYearTrades = async () => {
       try {
-        const fromDateStr = format(startOfMonth(currentMonth), 'yyyy-MM-dd')
+        const fromDateStr = format(startOfMonth(subMonths(currentMonth, 11)), 'yyyy-MM-dd')
         const toDateStr = format(endOfMonth(currentMonth), 'yyyy-MM-dd')
         
         const fetched = await getTrades({
@@ -43,7 +43,7 @@ export default function CalendarPage() {
       }
     }
 
-    fetchMonthTrades()
+    fetchYearTrades()
   }, [currentMonth])
 
   // Update selected day diary
@@ -80,6 +80,41 @@ export default function CalendarPage() {
   const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd })
   const startDayOfWeek = getDay(monthStart)
 
+  // Construct 12-month calendar heatmap
+  const yearStart = subMonths(currentMonth, 11)
+  const startInterval = startOfMonth(yearStart)
+  const endInterval = endOfMonth(currentMonth)
+  const allDays = eachDayOfInterval({ start: startInterval, end: endInterval })
+
+  // Find max daily win/loss in the 12-month period for scaling
+  let maxDayWin = 0
+  let maxDayLoss = 0
+  
+  const dailyTotals: { [key: string]: number } = {}
+  convertedTrades.forEach((t) => {
+    if (!t.entry_time) return
+    const dateStr = format(new Date(t.entry_time), 'yyyy-MM-dd')
+    dailyTotals[dateStr] = (dailyTotals[dateStr] || 0) + (t.net_pnl || 0)
+  })
+  
+  Object.values(dailyTotals).forEach((val) => {
+    if (val > maxDayWin) maxDayWin = val
+    if (val < maxDayLoss) maxDayLoss = val
+  })
+
+  // Group days into weeks (Sunday to Saturday columns)
+  const weeks: (Date | null)[][] = []
+  let currentWeek: (Date | null)[] = Array(7).fill(null)
+  
+  allDays.forEach((day) => {
+    const dayOfWeek = getDay(day)
+    currentWeek[dayOfWeek] = day
+    if (dayOfWeek === 6 || day === allDays[allDays.length - 1]) {
+      weeks.push(currentWeek)
+      currentWeek = Array(7).fill(null)
+    }
+  })
+
   const handlePrevMonth = () => setCurrentMonth(subMonths(currentMonth, 1))
   const handleNextMonth = () => setCurrentMonth(addMonths(currentMonth, 1))
 
@@ -92,6 +127,76 @@ export default function CalendarPage() {
           Monitor your consistency, wins, and losses on a monthly roadmap
         </p>
       </div>
+
+      {/* Heatmap Card */}
+      <Card style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 style={{ fontSize: '15px', fontWeight: 600 }}>Consistency Heatmap (Past 12 Months)</h3>
+          <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: 'var(--text-muted)' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: '8px', height: '8px', backgroundColor: 'var(--danger)', opacity: 0.8, borderRadius: '2px' }} /> Loss</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: '8px', height: '8px', backgroundColor: 'var(--border-color)', opacity: 0.15, borderRadius: '2px' }} /> No Trades</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: '8px', height: '8px', backgroundColor: 'var(--success)', opacity: 0.8, borderRadius: '2px' }} /> Win</span>
+          </div>
+        </div>
+        
+        <div style={{ overflowX: 'auto', width: '100%' }}>
+          <div style={{ display: 'flex', gap: '3px', padding: '4px 0', minWidth: '700px' }}>
+            {weeks.map((week, weekIdx) => (
+              <div key={weekIdx} style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                {week.map((day, dayIdx) => {
+                  if (!day) return <div key={dayIdx} style={{ width: '11px', height: '11px', backgroundColor: 'transparent' }} />
+                  
+                  const dayTrades = convertedTrades.filter((t) => t.entry_time && isSameDay(new Date(t.entry_time), day))
+                  const dayNetPnL = dayTrades.reduce((acc, t) => acc + (t.net_pnl || 0), 0)
+                  const isTradeDay = dayTrades.length > 0
+                  
+                  let cellBg = 'var(--border-color)'
+                  let cellOpacity = 0.15
+                  if (isTradeDay) {
+                    if (dayNetPnL > 0) {
+                      cellBg = 'var(--success)'
+                      cellOpacity = maxDayWin > 0 ? 0.3 + (dayNetPnL / maxDayWin) * 0.7 : 0.6
+                    } else if (dayNetPnL < 0) {
+                      cellBg = 'var(--danger)'
+                      cellOpacity = maxDayLoss < 0 ? 0.3 + (dayNetPnL / maxDayLoss) * 0.7 : 0.6
+                    } else {
+                      cellBg = 'var(--text-muted)'
+                      cellOpacity = 0.5
+                    }
+                  }
+
+                  const titleText = `${format(day, 'dd MMM yyyy')}: ${
+                    isTradeDay 
+                      ? `${dayNetPnL >= 0 ? '+' : ''}${formatAmount(dayNetPnL, preferredCurrency)} (${dayTrades.length} trade${dayTrades.length > 1 ? 's' : ''})` 
+                      : 'No trades'
+                  }`
+
+                  return (
+                    <button
+                      key={day.toISOString()}
+                      title={titleText}
+                      onClick={() => setSelectedDate(day)}
+                      style={{
+                        width: '11px',
+                        height: '11px',
+                        backgroundColor: cellBg,
+                        opacity: cellOpacity,
+                        borderRadius: '2px',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: 0,
+                        transition: 'transform var(--transition-fast)',
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.25)'; e.currentTarget.style.zIndex = '10'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.zIndex = '1'; }}
+                    />
+                  )
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      </Card>
 
       <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: '24px' }}>
         
@@ -167,12 +272,12 @@ export default function CalendarPage() {
                     transition: 'all var(--transition-fast)',
                   }}
                 >
-                  <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                  <span className="font-mono" style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
                     {format(day, 'd')}
                   </span>
                   
                   {isTradeDay && (
-                    <span style={{ 
+                    <span className="font-mono" style={{ 
                       fontSize: '11px', 
                       fontWeight: 700, 
                       color: isProfit ? 'var(--success)' : 'var(--danger)',
@@ -223,7 +328,7 @@ export default function CalendarPage() {
                         <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{t.display_symbol || t.symbol}</span>
                         <span style={{ marginLeft: '8px', fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)' }}>{t.side}</span>
                       </div>
-                      <span style={{ fontWeight: 700, color: isProfit ? 'var(--success)' : 'var(--danger)' }}>
+                      <span className="font-mono" style={{ fontWeight: 700, color: isProfit ? 'var(--success)' : 'var(--danger)' }}>
                         {isProfit ? '+' : ''}{formatAmount(Number(t.net_pnl), t.currency)}
                       </span>
                     </div>

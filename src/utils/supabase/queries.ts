@@ -245,6 +245,11 @@ export async function deleteTrade(id: string): Promise<void> {
   if (error) throw error
 }
 
+export async function deleteTrades(ids: string[]): Promise<void> {
+  const { error } = await supabase.from('trades').delete().in('id', ids)
+  if (error) throw error
+}
+
 // Tags
 export async function getTags(): Promise<Tag[]> {
   const { data, error } = await supabase

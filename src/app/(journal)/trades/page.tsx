@@ -12,9 +12,10 @@ import {
   Trash2, 
   Edit3, 
   Filter,
-  TrendingUp
+  TrendingUp,
+  Download
 } from 'lucide-react'
-import { getTrades, createTrade, updateTrade, deleteTrade, getAccounts, getTags, createTag, createAccount, getCommissionRules } from '@/utils/supabase/queries'
+import { getTrades, createTrade, updateTrade, deleteTrade, deleteTrades, getAccounts, getTags, createTag, createAccount, getCommissionRules } from '@/utils/supabase/queries'
 import { Trade, Account, Tag, AssetClass, TradeSide, TradeEmotion, CommissionRule } from '@/types/journal'
 import { calculateCommission } from '@/utils/commission'
 import { useCurrency } from '@/utils/useCurrency'
@@ -44,6 +45,7 @@ export default function TradesPage() {
   const [selectedAssetClass, setSelectedAssetClass] = useState('ALL')
   const [selectedStatus, setSelectedStatus] = useState('ALL')
   const [selectedSide, setSelectedSide] = useState('ALL')
+  const [selectedTradeIds, setSelectedTradeIds] = useState<string[]>([])
 
   // Modals state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
@@ -139,6 +141,7 @@ export default function TradesPage() {
       }
       const fetchedTrades = await getTrades(filters)
       setTrades(fetchedTrades)
+      setSelectedTradeIds([])
     } catch (err) {
       console.error(err)
     } finally {
@@ -320,6 +323,67 @@ export default function TradesPage() {
     }
   }
 
+  const handleBulkDelete = async () => {
+    if (selectedTradeIds.length === 0) return
+    if (!confirm(`Are you sure you want to delete ${selectedTradeIds.length} selected trade(s)?`)) return
+    try {
+      await deleteTrades(selectedTradeIds)
+      setSelectedTradeIds([])
+      fetchData()
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const handleExportCsv = () => {
+    if (trades.length === 0) return
+    
+    const headers = [
+      'Symbol',
+      'Side',
+      'Quantity',
+      'EntryPrice',
+      'ExitPrice',
+      'EntryTime',
+      'ExitTime',
+      'NetPnL',
+      'Fees',
+      'AssetClass',
+      'Setup',
+      'Notes'
+    ]
+    
+    const csvRows = trades.map((t) => [
+      t.symbol,
+      t.side,
+      t.quantity,
+      t.entry_price,
+      t.exit_price ?? '',
+      t.entry_time,
+      t.exit_time ?? '',
+      t.net_pnl ?? '',
+      t.fees,
+      t.asset_class,
+      t.setup ?? '',
+      (t.notes ?? '').replace(/"/g, '""')
+    ])
+    
+    const csvContent = [
+      headers.join(','),
+      ...csvRows.map((row) => row.map((val) => `"${val}"`).join(','))
+    ].join('\n')
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.setAttribute('href', url)
+    link.setAttribute('download', `peaky_ledger_trades_${new Date().toISOString().split('T')[0]}.csv`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }} className="animate-fade-in">
       {/* Header */}
@@ -330,10 +394,16 @@ export default function TradesPage() {
             Enter and manage all your trade entries
           </p>
         </div>
-        <Button variant="primary" onClick={handleOpenAddModal} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Plus size={16} />
-          <span>Add Trade</span>
-        </Button>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <Button variant="secondary" onClick={handleExportCsv} style={{ display: 'flex', alignItems: 'center', gap: '8px' }} disabled={trades.length === 0}>
+            <Download size={16} />
+            <span>Export CSV</span>
+          </Button>
+          <Button variant="primary" onClick={handleOpenAddModal} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Plus size={16} />
+            <span>Add Trade</span>
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -403,6 +473,19 @@ export default function TradesPage() {
           <table>
             <thead>
               <tr>
+                <th className="td-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={trades.length > 0 && selectedTradeIds.length === trades.length}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedTradeIds(trades.map((t) => t.id))
+                      } else {
+                        setSelectedTradeIds([])
+                      }
+                    }}
+                  />
+                </th>
                 <th>Symbol</th>
                 <th>Side</th>
                 <th>Qty</th>
@@ -417,8 +500,22 @@ export default function TradesPage() {
             <tbody>
               {trades.map((trade) => {
                 const isProfit = (trade.net_pnl ?? 0) >= 0
+                const isSelected = selectedTradeIds.includes(trade.id)
                 return (
-                  <tr key={trade.id}>
+                  <tr key={trade.id} style={{ backgroundColor: isSelected ? 'var(--bg-surface-hover)' : undefined }}>
+                    <td className="td-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedTradeIds([...selectedTradeIds, trade.id])
+                          } else {
+                            setSelectedTradeIds(selectedTradeIds.filter((id) => id !== trade.id))
+                          }
+                        }}
+                      />
+                    </td>
                     <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
                       {trade.display_symbol || trade.symbol}
                       <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
@@ -445,14 +542,14 @@ export default function TradesPage() {
                         {trade.side}
                       </Badge>
                     </td>
-                    <td>{trade.quantity}</td>
-                    <td>{formatAmount(Number(trade.entry_price), trade.currency)}</td>
-                    <td>{trade.exit_price ? formatAmount(Number(trade.exit_price), trade.currency) : '—'}</td>
-                    <td style={{ fontWeight: 600, color: trade.exit_price ? (isProfit ? 'var(--success)' : 'var(--danger)') : 'var(--text-secondary)' }}>
+                    <td className="font-mono">{trade.quantity}</td>
+                    <td className="font-mono">{formatAmount(Number(trade.entry_price), trade.currency)}</td>
+                    <td className="font-mono">{trade.exit_price ? formatAmount(Number(trade.exit_price), trade.currency) : '—'}</td>
+                    <td className="font-mono" style={{ fontWeight: 600, color: trade.exit_price ? (isProfit ? 'var(--success)' : 'var(--danger)') : 'var(--text-secondary)' }}>
                       {trade.exit_price ? `${isProfit ? '+' : ''}${formatAmount(Number(trade.net_pnl), trade.currency)}` : 'Open'}
                     </td>
                     <td style={{ fontSize: '13px' }}>{trade.setup || '—'}</td>
-                    <td style={{ fontSize: '13px' }}>{format(new Date(trade.entry_time), 'dd MMM yy')}</td>
+                    <td className="font-mono" style={{ fontSize: '13px' }}>{format(new Date(trade.entry_time), 'dd MMM yy')}</td>
                     <td style={{ textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', gap: '8px' }}>
                         <button
@@ -478,6 +575,28 @@ export default function TradesPage() {
           </table>
         </Card>
       )}
+
+      {/* Floating Bulk Actions Bar */}
+      <div className={`bulk-actions-bar glassmorphism ${selectedTradeIds.length > 0 ? 'active' : ''}`} style={{ backgroundColor: 'var(--bg-surface)' }}>
+        <span style={{ fontSize: '14px', fontWeight: 600 }}>
+          {selectedTradeIds.length} trade{selectedTradeIds.length > 1 ? 's' : ''} selected
+        </span>
+        <Button 
+          variant="danger" 
+          onClick={handleBulkDelete}
+          style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px' }}
+        >
+          <Trash2 size={16} />
+          <span>Delete Selected</span>
+        </Button>
+        <Button 
+          variant="secondary" 
+          onClick={() => setSelectedTradeIds([])}
+          style={{ padding: '8px 16px' }}
+        >
+          Cancel
+        </Button>
+      </div>
 
       {/* Add / Edit Modals */}
       <Modal isOpen={isAddModalOpen || isEditModalOpen} onClose={() => { setIsAddModalOpen(false); setIsEditModalOpen(false); }} title={isAddModalOpen ? 'Add New Trade' : 'Edit Trade'}>

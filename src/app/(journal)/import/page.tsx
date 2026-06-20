@@ -19,6 +19,21 @@ function ImportPageContent() {
   const [csvFile, setCsvFile] = useState<File | null>(null)
   const [importing, setImporting] = useState(false)
   const [importMessage, setImportMessage] = useState('')
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([])
+  const [csvRows, setCsvRows] = useState<Record<string, string>[]>([])
+  const [isMapping, setIsMapping] = useState(false)
+  const [mappings, setMappings] = useState<Record<string, string>>({
+    symbol: '',
+    side: '',
+    quantity: '',
+    entryPrice: '',
+    exitPrice: '',
+    entryTime: '',
+    exitTime: '',
+    fees: '',
+    setup: '',
+    notes: '',
+  })
 
   const [fromDate, setFromDate] = useState(() => {
     const d = new Date()
@@ -82,84 +97,144 @@ function ImportPageContent() {
     }
   }
 
-  // Handle CSV Import
+  // Helper for finding fuzzy mapping matches
+  const findFuzzyMatch = (headers: string[], field: string): string => {
+    const f = field.toLowerCase()
+    const match = headers.find(h => {
+      const hl = h.toLowerCase()
+      return hl === f || 
+             hl.replace(/[^a-z0-9]/g, '') === f ||
+             hl.includes(f) || 
+             (f === 'symbol' && hl.includes('ticker')) ||
+             (f === 'quantity' && (hl.includes('qty') || hl.includes('size') || hl.includes('shares') || hl.includes('volume'))) ||
+             (f === 'entryprice' && (hl.includes('entry') || hl.includes('buy')) && hl.includes('price')) ||
+             (f === 'exitprice' && (hl.includes('exit') || hl.includes('sell')) && hl.includes('price')) ||
+             (f === 'entrytime' && (hl.includes('entry') || hl.includes('execution') || hl.includes('buy')) && (hl.includes('time') || hl.includes('date'))) ||
+             (f === 'exittime' && (hl.includes('exit') || hl.includes('sell')) && (hl.includes('time') || hl.includes('date')))
+    })
+    return match || ''
+  }
+
+  // Handle CSV Import & mapping prep
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setCsvFile(e.target.files[0])
+      const file = e.target.files[0]
+      setCsvFile(file)
+      setImportMessage('')
+      
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+          const headers = results.meta.fields || []
+          setCsvHeaders(headers)
+          setCsvRows(results.data as Record<string, string>[])
+          
+          // Pre-populate fuzzy matches
+          setMappings({
+            symbol: findFuzzyMatch(headers, 'symbol') || findFuzzyMatch(headers, 'ticker') || '',
+            side: findFuzzyMatch(headers, 'side') || findFuzzyMatch(headers, 'action') || findFuzzyMatch(headers, 'direction') || findFuzzyMatch(headers, 'type') || '',
+            quantity: findFuzzyMatch(headers, 'quantity') || findFuzzyMatch(headers, 'qty') || findFuzzyMatch(headers, 'size') || findFuzzyMatch(headers, 'shares') || '',
+            entryPrice: findFuzzyMatch(headers, 'entryprice') || findFuzzyMatch(headers, 'price') || findFuzzyMatch(headers, 'buyprice') || '',
+            exitPrice: findFuzzyMatch(headers, 'exitprice') || findFuzzyMatch(headers, 'sellprice') || '',
+            entryTime: findFuzzyMatch(headers, 'entrytime') || findFuzzyMatch(headers, 'date') || findFuzzyMatch(headers, 'time') || '',
+            exitTime: findFuzzyMatch(headers, 'exittime') || '',
+            fees: findFuzzyMatch(headers, 'fees') || findFuzzyMatch(headers, 'commission') || findFuzzyMatch(headers, 'brokerage') || '',
+            setup: findFuzzyMatch(headers, 'setup') || findFuzzyMatch(headers, 'strategy') || '',
+            notes: findFuzzyMatch(headers, 'notes') || findFuzzyMatch(headers, 'comment') || '',
+          })
+          setIsMapping(true)
+        },
+        error: (error) => {
+          setImportMessage(`Parsing error: ${error.message}`)
+        }
+      })
     }
   }
 
-  const handleCsvImport = () => {
-    if (!csvFile || !selectedAccountId) return
+  const handleCsvImport = async () => {
+    if (csvRows.length === 0 || !selectedAccountId) return
     setImporting(true)
     setImportMessage('')
 
-    Papa.parse(csvFile, {
-      header: true,
-      skipEmptyLines: true,
-      complete: async (results) => {
-        try {
-          const rows = results.data as Record<string, string>[]
-          let count = 0
+    // Validate required mappings
+    if (!mappings.symbol || !mappings.side || !mappings.quantity || !mappings.entryPrice || !mappings.entryTime) {
+      setImportMessage('Error: Please map all required fields (Symbol, Side, Qty, Entry Price, Entry Date).')
+      setImporting(false)
+      return
+    }
 
-          for (const row of rows) {
-            // Required CSV Format: Symbol, Side, Quantity, EntryPrice, ExitPrice, EntryTime, ExitTime, Fees
-            if (!row.Symbol || !row.Side || !row.Quantity || !row.EntryPrice || !row.EntryTime) {
-              continue
-            }
+    try {
+      let count = 0
+      for (const row of csvRows) {
+        const symbol = row[mappings.symbol]
+        const sideVal = row[mappings.side]
+        const quantity = row[mappings.quantity]
+        const entryPrice = row[mappings.entryPrice]
+        const entryTime = row[mappings.entryTime]
 
-            const exitPriceVal = row.ExitPrice ? Number(row.ExitPrice) : null
-
-            await createTrade({
-              account_id: selectedAccountId,
-              symbol: row.Symbol,
-              display_symbol: row.Symbol.split(':').pop() || row.Symbol,
-              asset_class: 'equity',
-              side: row.Side.toUpperCase() === 'SHORT' ? 'SHORT' : 'LONG',
-              quantity: Number(row.Quantity),
-              entry_price: Number(row.EntryPrice),
-              exit_price: exitPriceVal,
-              entry_time: new Date(row.EntryTime).toISOString(),
-              exit_time: row.ExitTime ? new Date(row.ExitTime).toISOString() : null,
-              status: exitPriceVal ? 'CLOSED' : 'OPEN',
-              gross_pnl: null,
-              fees: row.Fees ? Number(row.Fees) : 0,
-              net_pnl: null,
-              currency: 'INR',
-              strike_price: null,
-              option_type: null,
-              expiry_date: null,
-              contract_multiplier: 1,
-              setup: row.Setup || null,
-              notes: row.Notes || null,
-              satisfaction: null,
-              plan_adherence: null,
-              emotion: null,
-              mfe_price: null,
-              mae_price: null,
-              r_multiple: null,
-              duration_minutes: null,
-              source: 'csv_import',
-              external_trade_id: row.TradeId || null,
-              exchange: null,
-            })
-            count++
-          }
-
-          setImportMessage(`Successfully imported ${count} trades! 📊`)
-        } catch (err: unknown) {
-          const errMsg = err instanceof Error ? err.message : 'Unknown import error'
-          setImportMessage(`Import error: ${errMsg}`)
-        } finally {
-          setImporting(false)
-          setCsvFile(null)
+        if (!symbol || !sideVal || !quantity || !entryPrice || !entryTime) {
+          continue
         }
-      },
-      error: (error) => {
-        setImportMessage(`Parsing error: ${error.message}`)
-        setImporting(false)
+
+        const exitPriceVal = mappings.exitPrice && row[mappings.exitPrice] ? Number(row[mappings.exitPrice]) : null
+        const feesVal = mappings.fees && row[mappings.fees] ? Number(row[mappings.fees]) : 0
+        const setupVal = mappings.setup && row[mappings.setup] ? row[mappings.setup] : null
+        const notesVal = mappings.notes && row[mappings.notes] ? row[mappings.notes] : null
+        const exitTimeVal = mappings.exitTime && row[mappings.exitTime] ? row[mappings.exitTime] : null
+
+        // Normalise side
+        let normalizedSide: 'LONG' | 'SHORT' = 'LONG'
+        const sideLower = sideVal.toLowerCase()
+        if (sideLower.includes('short') || sideLower.includes('sell') || sideLower.startsWith('s') || sideLower === '0') {
+          normalizedSide = 'SHORT'
+        }
+
+        await createTrade({
+          account_id: selectedAccountId,
+          symbol: symbol.toUpperCase(),
+          display_symbol: symbol.split(':').pop()?.toUpperCase() || symbol.toUpperCase(),
+          asset_class: 'equity',
+          side: normalizedSide,
+          quantity: Number(quantity),
+          entry_price: Number(entryPrice),
+          exit_price: exitPriceVal,
+          entry_time: new Date(entryTime).toISOString(),
+          exit_time: exitTimeVal ? new Date(exitTimeVal).toISOString() : null,
+          status: exitPriceVal ? 'CLOSED' : 'OPEN',
+          gross_pnl: null,
+          fees: Number(feesVal),
+          net_pnl: null,
+          currency: 'INR',
+          strike_price: null,
+          option_type: null,
+          expiry_date: null,
+          contract_multiplier: 1,
+          setup: setupVal,
+          notes: notesVal,
+          satisfaction: null,
+          plan_adherence: null,
+          emotion: null,
+          mfe_price: null,
+          mae_price: null,
+          r_multiple: null,
+          duration_minutes: null,
+          source: 'csv_import',
+          external_trade_id: null,
+          exchange: null,
+        })
+        count++
       }
-    })
+
+      setImportMessage(`Successfully imported ${count} trades! 📊`)
+      setIsMapping(false)
+      setCsvFile(null)
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : 'Unknown import error'
+      setImportMessage(`Import error: ${errMsg}`)
+    } finally {
+      setImporting(false)
+    }
   }
 
   const selectedAccount = accounts.find((acc) => acc.id === selectedAccountId)
@@ -348,37 +423,171 @@ function ImportPageContent() {
               <Upload size={24} />
             </div>
             <div>
-              <h3 style={{ fontSize: '18px', fontWeight: 600 }}>CSV Trade Import</h3>
-              <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Import from generic ledger sheets</p>
+              <h3 style={{ fontSize: '18px', fontWeight: 600 }}>Universal CSV Import</h3>
+              <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Map and import from ANY broker's ledger CSV</p>
             </div>
           </div>
 
-          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-            Upload a CSV containing your trade ledger. Columns required:
-            <code style={{ display: 'block', backgroundColor: 'var(--bg-surface-hover)', padding: '6px 10px', borderRadius: '4px', marginTop: '6px', fontSize: '11px' }}>
-              Symbol, Side, Quantity, EntryPrice, ExitPrice, EntryTime, ExitTime, Fees, Setup, Notes
-            </code>
-          </p>
-
-          <div style={{ border: '2px dashed var(--border-color)', borderRadius: '8px', padding: '24px', textAlign: 'center', cursor: 'pointer' }}>
-            <input
-              type="file"
-              accept=".csv"
-              onChange={handleFileChange}
-              style={{ display: 'none' }}
-              id="csv-file-input"
-            />
-            <label htmlFor="csv-file-input" style={{ cursor: 'pointer', margin: 0 }}>
-              <Upload size={32} style={{ color: 'var(--text-muted)', marginBottom: '8px' }} />
-              <div style={{ fontSize: '14px', fontWeight: 600 }}>
-                {csvFile ? csvFile.name : 'Click to select CSV file'}
+          {isMapping ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <h4 style={{ fontSize: '14px', fontWeight: 600, borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
+                Map CSV Columns to Trade Fields
+              </h4>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: 600 }}>Symbol *</label>
+                  <select
+                    value={mappings.symbol}
+                    onChange={(e) => setMappings({ ...mappings, symbol: e.target.value })}
+                    style={{ padding: '8px', fontSize: '13px' }}
+                  >
+                    <option value="">-- Select Column --</option>
+                    {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: 600 }}>Side (Direction) *</label>
+                  <select
+                    value={mappings.side}
+                    onChange={(e) => setMappings({ ...mappings, side: e.target.value })}
+                    style={{ padding: '8px', fontSize: '13px' }}
+                  >
+                    <option value="">-- Select Column --</option>
+                    {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                </div>
               </div>
-            </label>
-          </div>
 
-          <Button variant="primary" onClick={handleCsvImport} loading={importing} disabled={!csvFile} style={{ width: '100%' }}>
-            Process Import
-          </Button>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: 600 }}>Quantity *</label>
+                  <select
+                    value={mappings.quantity}
+                    onChange={(e) => setMappings({ ...mappings, quantity: e.target.value })}
+                    style={{ padding: '8px', fontSize: '13px' }}
+                  >
+                    <option value="">-- Select Column --</option>
+                    {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: 600 }}>Entry Price *</label>
+                  <select
+                    value={mappings.entryPrice}
+                    onChange={(e) => setMappings({ ...mappings, entryPrice: e.target.value })}
+                    style={{ padding: '8px', fontSize: '13px' }}
+                  >
+                    <option value="">-- Select Column --</option>
+                    {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: 600 }}>Exit Price</label>
+                  <select
+                    value={mappings.exitPrice}
+                    onChange={(e) => setMappings({ ...mappings, exitPrice: e.target.value })}
+                    style={{ padding: '8px', fontSize: '13px' }}
+                  >
+                    <option value="">-- Select Column --</option>
+                    {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: 600 }}>Entry Date & Time *</label>
+                  <select
+                    value={mappings.entryTime}
+                    onChange={(e) => setMappings({ ...mappings, entryTime: e.target.value })}
+                    style={{ padding: '8px', fontSize: '13px' }}
+                  >
+                    <option value="">-- Select Column --</option>
+                    {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: 600 }}>Exit Date & Time</label>
+                  <select
+                    value={mappings.exitTime}
+                    onChange={(e) => setMappings({ ...mappings, exitTime: e.target.value })}
+                    style={{ padding: '8px', fontSize: '13px' }}
+                  >
+                    <option value="">-- Select Column --</option>
+                    {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: 600 }}>Fees / Commission</label>
+                  <select
+                    value={mappings.fees}
+                    onChange={(e) => setMappings({ ...mappings, fees: e.target.value })}
+                    style={{ padding: '8px', fontSize: '13px' }}
+                  >
+                    <option value="">-- Select Column --</option>
+                    {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: 600 }}>Setup</label>
+                  <select
+                    value={mappings.setup}
+                    onChange={(e) => setMappings({ ...mappings, setup: e.target.value })}
+                    style={{ padding: '8px', fontSize: '13px' }}
+                  >
+                    <option value="">-- Select Column --</option>
+                    {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: 600 }}>Notes</label>
+                  <select
+                    value={mappings.notes}
+                    onChange={(e) => setMappings({ ...mappings, notes: e.target.value })}
+                    style={{ padding: '8px', fontSize: '13px' }}
+                  >
+                    <option value="">-- Select Column --</option>
+                    {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                <Button variant="secondary" onClick={() => { setIsMapping(false); setCsvFile(null); }} style={{ flex: 1 }}>
+                  Cancel
+                </Button>
+                <Button variant="primary" onClick={handleCsvImport} loading={importing} style={{ flex: 2 }}>
+                  Import ({csvRows.length} trades)
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                Upload any ledger CSV. On the next step you'll map columns like <strong>Symbol, Side, Quantity, EntryPrice</strong> to import your data correctly.
+              </p>
+
+              <div style={{ border: '2px dashed var(--border-color)', borderRadius: '8px', padding: '24px', textAlign: 'center', cursor: 'pointer' }}>
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileChange}
+                  style={{ display: 'none' }}
+                  id="csv-file-input"
+                />
+                <label htmlFor="csv-file-input" style={{ cursor: 'pointer', margin: 0 }}>
+                  <Upload size={32} style={{ color: 'var(--text-muted)', marginBottom: '8px' }} />
+                  <div style={{ fontSize: '14px', fontWeight: 600 }}>
+                    {csvFile ? csvFile.name : 'Click to select CSV file'}
+                  </div>
+                </label>
+              </div>
+            </>
+          )}
 
           {importMessage && (
             <div style={{ fontSize: '14px', fontWeight: 600, color: importMessage.includes('Successfully') ? 'var(--success)' : 'var(--danger)', marginTop: '8px' }}>

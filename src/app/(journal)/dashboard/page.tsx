@@ -158,7 +158,7 @@ export default function DashboardPage() {
                 </div>
               </div>
               <div style={{ marginTop: '16px' }}>
-                <h3 style={{ fontSize: '24px', fontWeight: 700, letterSpacing: '-0.025em', color: 'var(--text-primary)' }}>
+                <h3 className="font-mono" style={{ fontSize: '24px', fontWeight: 700, letterSpacing: '-0.025em', color: 'var(--text-primary)' }}>
                   {stat.value}
                 </h3>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', fontSize: '13px' }}>
@@ -188,16 +188,17 @@ export default function DashboardPage() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
-                <XAxis dataKey="date" stroke="var(--text-muted)" fontSize={12} tickLine={false} />
+                <XAxis dataKey="date" stroke="var(--text-muted)" fontSize={11} tickLine={false} tick={{ fontFamily: 'var(--font-mono)' }} />
                 <YAxis 
                   stroke="var(--text-muted)" 
-                  fontSize={12} 
+                  fontSize={11} 
                   tickLine={false} 
                   domain={['dataMin - 1000', 'dataMax + 1000']}
+                  tick={{ fontFamily: 'var(--font-mono)' }}
                   tickFormatter={(v) => `${currencySymbol}${(v/1000).toFixed(0)}k`}
                 />
                 <Tooltip 
-                  contentStyle={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-color)', borderRadius: '8px' }}
+                  contentStyle={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-color)', borderRadius: '8px', fontFamily: 'var(--font-mono)', fontSize: '12px' }}
                   labelStyle={{ color: 'var(--text-secondary)', fontWeight: 600 }}
                 />
                 <Area type="monotone" dataKey="balance" stroke="var(--primary)" strokeWidth={2} fillOpacity={1} fill="url(#colorBalance)" />
@@ -218,10 +219,10 @@ export default function DashboardPage() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={metrics.dailyPnL}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
-                  <XAxis dataKey="date" stroke="var(--text-muted)" fontSize={10} tickLine={false} tickFormatter={(v) => v.slice(5)} />
-                  <YAxis stroke="var(--text-muted)" fontSize={12} tickLine={false} />
+                  <XAxis dataKey="date" stroke="var(--text-muted)" fontSize={10} tickLine={false} tickFormatter={(v) => v.slice(5)} tick={{ fontFamily: 'var(--font-mono)' }} />
+                  <YAxis stroke="var(--text-muted)" fontSize={11} tickLine={false} tick={{ fontFamily: 'var(--font-mono)' }} />
                   <Tooltip 
-                    contentStyle={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-color)', borderRadius: '8px' }}
+                    contentStyle={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-color)', borderRadius: '8px', fontFamily: 'var(--font-mono)', fontSize: '12px' }}
                   />
                   <Bar dataKey="pnl">
                     {metrics.dailyPnL.map((entry, index) => (
@@ -248,25 +249,25 @@ export default function DashboardPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', borderRight: '1px solid var(--border-color)', paddingRight: '16px' }}>
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>AVERAGE WIN</span>
-            <span style={{ fontSize: '18px', fontWeight: 700, color: 'var(--success)' }}>
+            <span className="font-mono" style={{ fontSize: '18px', fontWeight: 700, color: 'var(--success)' }}>
               {formatCurrency(metrics.avgWin, preferredCurrency)}
             </span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', borderRight: '1px solid var(--border-color)', paddingRight: '16px' }}>
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>AVERAGE LOSS</span>
-            <span style={{ fontSize: '18px', fontWeight: 700, color: 'var(--danger)' }}>
+            <span className="font-mono" style={{ fontSize: '18px', fontWeight: 700, color: 'var(--danger)' }}>
               {formatCurrency(metrics.avgLoss, preferredCurrency)}
             </span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', borderRight: '1px solid var(--border-color)', paddingRight: '16px' }}>
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>MAX WINNING TRADE</span>
-            <span style={{ fontSize: '18px', fontWeight: 700, color: 'var(--success)' }}>
+            <span className="font-mono" style={{ fontSize: '18px', fontWeight: 700, color: 'var(--success)' }}>
               {formatCurrency(metrics.maxWin, preferredCurrency)}
             </span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>MAX LOSING TRADE</span>
-            <span style={{ fontSize: '18px', fontWeight: 700, color: 'var(--danger)' }}>
+            <span className="font-mono" style={{ fontSize: '18px', fontWeight: 700, color: 'var(--danger)' }}>
               {formatCurrency(metrics.maxLoss, preferredCurrency)}
             </span>
           </div>
