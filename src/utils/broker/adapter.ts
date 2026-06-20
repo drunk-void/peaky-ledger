@@ -15,6 +15,15 @@ export interface BrokerAdapter {
       exchangeType?: string
     }
   ): Promise<Partial<Trade>[]>
+  fetchRealisedPnL?(
+    accessToken: string,
+    appId: string,
+    params: { fromDate: string; toDate: string; segmentType?: string; exchangeType?: string }
+  ): Promise<Partial<Trade>[]>
+  fetchPositions?(
+    accessToken: string,
+    appId: string
+  ): Promise<Partial<Trade>[]>
 }
 
 export class FyersAdapter implements BrokerAdapter {
@@ -142,6 +151,115 @@ export class FyersAdapter implements BrokerAdapter {
         fees: 0, // calculated from Fyers fee models or provided
         currency: 'INR',
         status: 'CLOSED', // individual trade reports represent executed trades
+        source: 'fyers_api',
+      }
+    })
+  }
+
+  async fetchRealisedPnL(
+    accessToken: string,
+    appId: string,
+    params: {
+      fromDate: string
+      toDate: string
+      segmentType?: string
+      exchangeType?: string
+    }
+  ): Promise<Partial<Trade>[]> {
+    const segmentType = params.segmentType || '0'
+    const exchangeType = params.exchangeType || '0'
+    
+    let allPnL: any[] = []
+    let pageNo = 1
+    const pageSize = 100
+    let hasMore = true
+
+    while (hasMore) {
+      const url = `https://api-t1.fyers.in/api/v3/realised-pnl-history?exchange_type=${exchangeType}&from_date=${params.fromDate}&to_date=${params.toDate}&page_no=${pageNo}&page_size=${pageSize}&segment_type=${segmentType}`
+
+      const response = await fetch(url, { headers: { 'Authorization': `${appId}:${accessToken}` } })
+      if (!response.ok) throw new Error(`Fyers API returned HTTP ${response.status}`)
+      
+      const resData = await response.json()
+      if (resData.s !== 'ok') throw new Error(resData.message || 'Fyers API error')
+
+      const raw = resData.data || []
+      allPnL = allPnL.concat(raw)
+
+      if (raw.length < pageSize) {
+        hasMore = false
+      } else {
+        pageNo++
+      }
+    }
+
+    return allPnL.map((t) => {
+      const qty = Number(t.qty || t.quantity || t.traded_qty || 0)
+      const entryPrice = Number(t.buy_avg || t.buy_price || t.entry_price || 0)
+      const exitPrice = Number(t.sell_avg || t.sell_price || t.exit_price || 0)
+      const pnl = Number(t.realized_profit || t.pnl || t.net_pnl || 0)
+      
+      const side = 'LONG' 
+
+      return {
+        external_trade_id: t.id || t.tradeNumber || `${t.symbol}_pnl_${t.entry_date || params.fromDate}`,
+        symbol: t.symbol,
+        display_symbol: t.description || t.symbol?.split(':').pop() || t.symbol,
+        asset_class: this.mapSegmentToAssetClass(t.segment || 10),
+        exchange: this.mapExchange(t.exchange || 10),
+        side,
+        quantity: qty,
+        entry_price: entryPrice,
+        exit_price: exitPrice,
+        entry_time: t.entry_date ? new Date(t.entry_date).toISOString() : new Date(`${params.fromDate}T00:00:00Z`).toISOString(),
+        exit_time: t.exit_date ? new Date(t.exit_date).toISOString() : new Date(`${params.toDate}T23:59:59Z`).toISOString(),
+        net_pnl: pnl,
+        gross_pnl: pnl,
+        status: 'CLOSED',
+        source: 'fyers_api',
+      }
+    })
+  }
+
+  async fetchPositions(
+    accessToken: string,
+    appId: string
+  ): Promise<Partial<Trade>[]> {
+    const url = `https://api-t1.fyers.in/api/v3/positions`
+
+    const response = await fetch(url, { headers: { 'Authorization': `${appId}:${accessToken}` } })
+    if (!response.ok) throw new Error(`Fyers API returned HTTP ${response.status}`)
+    
+    const resData = await response.json()
+    if (resData.s !== 'ok') throw new Error(resData.message || 'Fyers API error')
+
+    const rawPositions = resData.netPositions || resData.data || []
+
+    return rawPositions.map((p: any) => {
+      const netQty = Number(p.netQty || 0)
+      const isClosed = netQty === 0
+      
+      const qty = isClosed ? Number(p.buyQty || p.sellQty || Math.abs(netQty) || 1) : Math.abs(netQty)
+      const entryPrice = Number(p.buyAvg || p.avgPrice || 0)
+      const exitPrice = isClosed ? Number(p.sellAvg || p.ltp || 0) : null
+      const pnl = Number(p.realized_profit || p.pl || 0)
+      
+      const side = (p.side === 1 || netQty > 0) ? 'LONG' : 'SHORT'
+
+      return {
+        external_trade_id: p.id || p.positionId || `${p.symbol}_pos_${new Date().toISOString().split('T')[0]}`,
+        symbol: p.symbol,
+        display_symbol: p.symbol?.split(':').pop() || p.symbol,
+        asset_class: this.mapSegmentToAssetClass(p.segment || 10),
+        exchange: this.mapExchange(p.exchange || 10),
+        side,
+        quantity: qty,
+        entry_price: entryPrice,
+        exit_price: exitPrice,
+        entry_time: new Date().toISOString(),
+        net_pnl: pnl,
+        gross_pnl: pnl,
+        status: isClosed ? 'CLOSED' : 'OPEN',
         source: 'fyers_api',
       }
     })
