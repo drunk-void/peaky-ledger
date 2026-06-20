@@ -20,6 +20,15 @@ function ImportPageContent() {
   const [importing, setImporting] = useState(false)
   const [importMessage, setImportMessage] = useState('')
 
+  const [fromDate, setFromDate] = useState(() => {
+    const d = new Date()
+    d.setDate(d.getDate() - 30)
+    return d.toISOString().split('T')[0]
+  })
+  const [toDate, setToDate] = useState(() => new Date().toISOString().split('T')[0])
+  const [segmentType, setSegmentType] = useState('0')
+  const [exchangeType, setExchangeType] = useState('0')
+
   useEffect(() => {
     const fetchAccounts = async () => {
       const active = await getAccounts()
@@ -54,7 +63,7 @@ function ImportPageContent() {
     setSyncMessage('')
 
     try {
-      const response = await fetch(`/api/broker/sync?accountId=${selectedAccountId}&fromDate=2025-01-01&toDate=2025-12-31`)
+      const response = await fetch(`/api/broker/sync?accountId=${selectedAccountId}&fromDate=${fromDate}&toDate=${toDate}&segmentType=${segmentType}&exchangeType=${exchangeType}`)
       const resData = await response.json()
       
       if (response.ok) {
@@ -228,16 +237,48 @@ function ImportPageContent() {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <label>Select Target Trading Account</label>
+            <label style={{ fontSize: '14px', fontWeight: 500 }}>Select Target Trading Account</label>
             <select
               value={selectedAccountId}
               onChange={(e) => setSelectedAccountId(e.target.value)}
-              style={{ padding: '8px 12px' }}
+              style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-surface)' }}
             >
               {accounts.map((acc) => (
                 <option key={acc.id} value={acc.id}>{acc.name} ({acc.broker})</option>
               ))}
             </select>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 }}>From Date</label>
+              <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-surface)' }} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 }}>To Date</label>
+              <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-surface)' }} />
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 }}>Segment Type</label>
+              <select value={segmentType} onChange={(e) => setSegmentType(e.target.value)} style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-surface)' }}>
+                <option value="0">All Segments (0)</option>
+                <option value="10">Equity (10)</option>
+                <option value="11">F&O (11)</option>
+                <option value="12">Currency (12)</option>
+              </select>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 }}>Exchange</label>
+              <select value={exchangeType} onChange={(e) => setExchangeType(e.target.value)} style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-surface)' }}>
+                <option value="0">All Exchanges (0)</option>
+                <option value="10">NSE (10)</option>
+                <option value="12">BSE (12)</option>
+                <option value="11">MCX (11)</option>
+              </select>
+            </div>
           </div>
 
           {selectedAccount && (
