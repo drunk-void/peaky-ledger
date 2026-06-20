@@ -1,0 +1,72 @@
+# Peaky Ledger — Cursor Rules
+
+## Project Overview
+
+Peaky Ledger is a full-stack trading journal built with Next.js 16 (App Router), React 19, Supabase, Zustand, and vanilla CSS. See `CODEBASE.md` for exhaustive details.
+
+## Tech Stack
+
+- Next.js 16.2.7 (App Router) — ⚠️ BREAKING CHANGES from older versions. Check `node_modules/next/dist/docs/`.
+- React 19.2.4
+- TypeScript 5 (strict mode)
+- Supabase (Postgres + Auth + Storage with Row Level Security)
+- Zustand 5 with persist middleware
+- Recharts 3, TipTap 3, PapaParse 5, date-fns 4, Lucide React
+- Vanilla CSS with HSL design tokens — **NO TAILWIND**
+
+## File Structure Rules
+
+- `src/proxy.ts` — middleware entry point (NOT `middleware.ts` in root)
+- `src/app/(journal)/` — route group containing all protected pages
+- `src/utils/supabase/queries.ts` — centralized database operations
+- `src/utils/broker/adapter.ts` — broker adapter interface pattern
+- `src/types/journal.ts` — ALL TypeScript interfaces and types
+- `src/store/useJournalStore.ts` — single Zustand store
+- `src/app/globals.css` — ALL CSS (design tokens, themes, component classes)
+- Path alias: `@/*` → `./src/*`
+
+## Coding Conventions
+
+- All page components use `'use client'` directive
+- All database queries go through `queries.ts` (uses browser Supabase client)
+- Server API routes use the server Supabase client from `server.ts`
+- UI components use `React.forwardRef` pattern
+- Modal component uses native `<dialog>` element
+- Named exports for components, default exports for pages
+- Inline styles are acceptable and common in this codebase
+- CSS custom properties for all colors/shadows/transitions (never hardcode)
+
+## Absolutely Do NOT
+
+- Use Tailwind CSS or any CSS framework
+- Create CSS module files
+- Put Supabase queries directly in components
+- Use `getServerSideProps` or `getStaticProps`
+- Import `@supabase/supabase-js` directly — use `client.ts` or `server.ts` wrappers
+- Create new middleware files — use `proxy.ts`
+- Hardcode color values — use CSS custom properties from globals.css
+
+## Key Patterns
+
+### Adding a new database entity:
+1. Add table to `supabase/schema.sql` with RLS policy
+2. Add TypeScript interface to `src/types/journal.ts`
+3. Add CRUD functions to `src/utils/supabase/queries.ts`
+4. Create the page/component that uses the new queries
+
+### Adding a new broker:
+1. Implement `BrokerAdapter` interface in `src/utils/broker/`
+2. Add broker type to `BrokerType` union in `types/journal.ts`
+3. Create API routes under `src/app/api/broker/`
+
+### Environment Variables:
+- `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` (public)
+- `FYERS_APP_ID` / `FYERS_APP_SECRET` / `FYERS_REDIRECT_URI` (server-only)
+- `BROKER_TOKEN_ENCRYPTION_KEY` (server-only, 64 hex chars)
+
+## Reference Files
+
+- `CODEBASE.md` — Complete project context and architecture
+- `AGENTS.md` — Agent behavioral rules
+- `docs/architecture.md` — System design and ER diagram
+- `supabase/schema.sql` — Database schema, triggers, RLS policies

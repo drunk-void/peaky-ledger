@@ -77,7 +77,8 @@ CREATE TABLE IF NOT EXISTS public.trades (
   source TEXT DEFAULT 'manual',                -- 'fyers_api', 'csv_import', 'manual'
   
   created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(account_id, external_trade_id)
 );
 
 -- Tags (many-to-many with trades)

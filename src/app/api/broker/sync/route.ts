@@ -8,6 +8,8 @@ export async function GET(request: Request) {
     const accountId = searchParams.get('accountId')
     const fromDate = searchParams.get('fromDate') || '2025-01-01'
     const toDate = searchParams.get('toDate') || '2025-12-31'
+    const segmentType = searchParams.get('segmentType') || undefined
+    const exchangeType = searchParams.get('exchangeType') || undefined
 
     if (!accountId) {
       return NextResponse.json({ error: 'accountId is required' }, { status: 400 })
@@ -40,35 +42,33 @@ export async function GET(request: Request) {
     const rawTrades = await adapter.fetchTrades(
       decryptedToken,
       process.env.FYERS_APP_ID || '',
-      { fromDate, toDate }
+      { fromDate, toDate, segmentType, exchangeType }
     )
 
     let syncedCount = 0
 
     // 3. Save trades with deduplication based on external_trade_id
-    for (const t of rawTrades) {
-      // Check if trade already exists
-      const { data: existing } = await supabase
-        .from('trades')
-        .select('id')
-        .eq('external_trade_id', t.external_trade_id)
-        .maybeSingle()
+    if (rawTrades.length > 0) {
+      const tradesToInsert = rawTrades.map(t => ({
+        ...t,
+        account_id: accountId,
+        user_id: connection.user_id,
+      }))
 
-      if (existing) continue
-
-      // Save new trade
       const { error: insertError } = await supabase
         .from('trades')
-        .insert({
-          ...t,
-          account_id: accountId,
-          user_id: connection.user_id,
+        .upsert(tradesToInsert, { 
+          onConflict: 'account_id,external_trade_id', 
+          ignoreDuplicates: true 
         })
 
-      if (!insertError) {
-        syncedCount++
+      if (insertError) {
+        console.error('Failed to upsert trades:', insertError)
       } else {
-        console.error('Failed to insert trade:', insertError)
+        // NOTE: Since we ignore duplicates, the exact number of NEW inserted rows 
+        // isn't returned directly unless we omit ignoreDuplicates.
+        // We'll return the total fetched length for now.
+        syncedCount = rawTrades.length
       }
     }
 

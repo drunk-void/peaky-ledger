@@ -1,0 +1,20 @@
+# Peaky Ledger — Cline / Roo Code Rules
+
+Read `CODEBASE.md` in the project root for complete project context, architecture, database schema, and coding conventions.
+
+## Summary
+
+Full-stack trading journal: Next.js 16 (App Router), React 19, TypeScript 5 (strict), Supabase (Postgres+Auth+Storage+RLS), Zustand 5, Recharts 3, TipTap 3, vanilla CSS.
+
+## Key Rules
+
+1. **No Tailwind** — vanilla CSS with HSL design tokens in `globals.css`
+2. **Next.js 16** — breaking changes from older versions, check `node_modules/next/dist/docs/`
+3. All DB queries → `src/utils/supabase/queries.ts`
+4. All types → `src/types/journal.ts`
+5. Middleware → `src/proxy.ts`
+6. Path alias → `@/*` = `./src/*`
+7. All pages → `'use client'` client components
+8. Modals → native `<dialog>` element
+9. Supabase clients: browser (`client.ts`) vs server (`server.ts`) — never mix
+10. Broker integrations → `BrokerAdapter` interface pattern

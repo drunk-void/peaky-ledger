@@ -1,0 +1,43 @@
+# Peaky Ledger — Aider Conventions
+
+## Project
+
+Full-stack trading journal. Next.js 16 (App Router), React 19, TypeScript 5 (strict), Supabase (Postgres+Auth+Storage+RLS), Zustand 5, Recharts 3, TipTap 3, vanilla CSS with HSL design tokens.
+
+Read `CODEBASE.md` for exhaustive context.
+
+## Critical Constraints
+
+- **NO TAILWIND.** Vanilla CSS only. Design tokens in `src/app/globals.css`.
+- **Next.js 16** has breaking changes. Check `node_modules/next/dist/docs/`.
+- All DB queries in `src/utils/supabase/queries.ts`.
+- All types in `src/types/journal.ts`.
+- Browser Supabase client: `src/utils/supabase/client.ts`.
+- Server Supabase client: `src/utils/supabase/server.ts`.
+- Middleware entry: `src/proxy.ts`.
+- Path alias: `@/*` → `./src/*`.
+- All pages use `'use client'`.
+- Broker pattern: implement `BrokerAdapter` interface.
+- Modal uses native `<dialog>`.
+
+## File Organization
+
+```
+src/app/(journal)/*         → protected feature pages
+src/app/api/broker/*        → server broker API routes
+src/components/layout/*     → Sidebar, Header, DateRangeFilter
+src/components/ui/*         → Button, Card, Input, Select, Badge, Modal, ThemeToggle, ScreenshotUploader
+src/store/                  → Zustand store
+src/types/                  → TypeScript interfaces
+src/utils/supabase/         → Supabase client wrappers + centralized queries
+src/utils/broker/           → Broker adapter pattern
+src/utils/                  → Metrics, currency, encryption, commission, screenshots
+```
+
+## When Adding Features
+
+1. Schema change → update `supabase/schema.sql` + RLS + `types/journal.ts` + `queries.ts`
+2. New page → add under `src/app/(journal)/` as `'use client'` component
+3. New component → `src/components/ui/` (forwardRef) or `src/components/layout/`
+4. New utility → `src/utils/` with camelCase naming
+5. New broker → implement `BrokerAdapter` + add to `BrokerType` union + create API routes
