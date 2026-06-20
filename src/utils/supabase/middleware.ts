@@ -51,7 +51,8 @@ export async function updateSession(request: NextRequest) {
     url.pathname.startsWith('/diary') || 
     url.pathname.startsWith('/playbook') || 
     url.pathname.startsWith('/settings') ||
-    url.pathname.startsWith('/import')
+    url.pathname.startsWith('/import') ||
+    url.pathname.startsWith('/reset-password')
 
   const isAuthRoute = 
     url.pathname === '/login' || 

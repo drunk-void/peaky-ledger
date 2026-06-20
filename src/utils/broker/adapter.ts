@@ -169,7 +169,7 @@ export class FyersAdapter implements BrokerAdapter {
     const segmentType = params.segmentType || '0'
     const exchangeType = params.exchangeType || '0'
     
-    let allPnL: any[] = []
+    let allPnL: FyersPnLRecord[] = []
     let pageNo = 1
     const pageSize = 100
     let hasMore = true
@@ -180,7 +180,7 @@ export class FyersAdapter implements BrokerAdapter {
       const response = await fetch(url, { headers: { 'Authorization': `${appId}:${accessToken}` } })
       if (!response.ok) throw new Error(`Fyers API returned HTTP ${response.status}`)
       
-      const resData = await response.json()
+      const resData = await response.json() as { s: string; message?: string; data?: FyersPnLRecord[] }
       if (resData.s !== 'ok') throw new Error(resData.message || 'Fyers API error')
 
       const raw = resData.data || []
@@ -230,12 +230,12 @@ export class FyersAdapter implements BrokerAdapter {
     const response = await fetch(url, { headers: { 'Authorization': `${appId}:${accessToken}` } })
     if (!response.ok) throw new Error(`Fyers API returned HTTP ${response.status}`)
     
-    const resData = await response.json()
+    const resData = await response.json() as { s: string; message?: string; netPositions?: FyersPositionRecord[]; data?: FyersPositionRecord[] }
     if (resData.s !== 'ok') throw new Error(resData.message || 'Fyers API error')
 
     const rawPositions = resData.netPositions || resData.data || []
 
-    return rawPositions.map((p: any) => {
+    return rawPositions.map((p: FyersPositionRecord) => {
       const netQty = Number(p.netQty || 0)
       const isClosed = netQty === 0
       
@@ -301,4 +301,45 @@ interface FyersTradeRecord {
   traded_qty: number | string
   trade_price: number | string
   orderDateTime: string
+}
+
+interface FyersPnLRecord {
+  id?: string
+  tradeNumber?: string
+  qty?: number | string
+  quantity?: number | string
+  traded_qty?: number | string
+  buy_avg?: number | string
+  buy_price?: number | string
+  entry_price?: number | string
+  sell_avg?: number | string
+  sell_price?: number | string
+  exit_price?: number | string
+  realized_profit?: number | string
+  pnl?: number | string
+  net_pnl?: number | string
+  symbol: string
+  description?: string
+  segment?: number
+  exchange?: number
+  entry_date?: string
+  exit_date?: string
+}
+
+interface FyersPositionRecord {
+  id?: string
+  positionId?: string
+  symbol: string
+  segment?: number
+  exchange?: number
+  netQty?: number
+  buyQty?: number
+  sellQty?: number
+  buyAvg?: number
+  sellAvg?: number
+  avgPrice?: number
+  ltp?: number
+  realized_profit?: number
+  pl?: number
+  side?: number
 }

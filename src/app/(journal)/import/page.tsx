@@ -267,7 +267,7 @@ function ImportPageContent() {
               <select value={syncMode} onChange={(e) => setSyncMode(e.target.value)} style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-surface)' }}>
                 <option value="trades">Trade Fills History</option>
                 <option value="pnl">Realised P&L History</option>
-                <option value="positions">Today's Positions</option>
+                <option value="positions">Today&apos;s Positions</option>
               </select>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
