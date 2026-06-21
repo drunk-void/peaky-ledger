@@ -5,11 +5,12 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
-import { getPlaybookEntries, createPlaybookEntry, updatePlaybookEntry, deletePlaybookEntry } from '@/utils/supabase/queries'
-import { PlaybookEntry } from '@/types/journal'
-import { Plus, Trash2, Edit3, BookMarked } from 'lucide-react'
+import { getPlaybookEntries, createPlaybookEntry, updatePlaybookEntry, deletePlaybookEntry, getTrades } from '@/utils/supabase/queries'
+import { PlaybookEntry, Trade } from '@/types/journal'
+import { Plus, Trash2, Edit3, BookMarked, Award, TrendingUp } from 'lucide-react'
 import { useEditor, EditorContent, Editor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
+import { useCurrency } from '@/utils/useCurrency'
 
 // Simple Editor Toolbar Component
 const EditorToolbar = ({ editor }: { editor: Editor | null }) => {
@@ -50,7 +51,9 @@ const EditorToolbar = ({ editor }: { editor: Editor | null }) => {
 }
 
 export default function PlaybookPage() {
+  const { preferredCurrency, formatAmount, rates } = useCurrency()
   const [entries, setEntries] = useState<PlaybookEntry[]>([])
+  const [trades, setTrades] = useState<Trade[]>([])
   const [loading, setLoading] = useState(true)
   
   // Modal states
@@ -70,6 +73,8 @@ export default function PlaybookPage() {
     try {
       const data = await getPlaybookEntries()
       setEntries(data)
+      const fetchedTrades = await getTrades()
+      setTrades(fetchedTrades)
     } catch (err) {
       console.error(err)
     } finally {
@@ -82,6 +87,47 @@ export default function PlaybookPage() {
       fetchEntries()
     })
   }, [])
+
+  // Calculate statistics per setup
+  const setupStats = entries.map((entry) => {
+    const matchingTrades = trades.filter((t) => 
+      t.setup && t.setup.trim().toLowerCase() === entry.title.trim().toLowerCase()
+    ).map((t) => {
+      const rate = rates[(t.currency || 'INR').toUpperCase()] !== undefined ? rates[(t.currency || 'INR').toUpperCase()] : 1
+      return {
+        ...t,
+        net_pnl: t.net_pnl !== null ? t.net_pnl * rate : null
+      }
+    })
+
+    const totalTradesCount = matchingTrades.length
+    const closedTrades = matchingTrades.filter((t) => t.exit_price !== null)
+    const winningTrades = closedTrades.filter((t) => (t.net_pnl || 0) > 0)
+    const losingTrades = closedTrades.filter((t) => (t.net_pnl || 0) < 0)
+    
+    const totalNetPnL = closedTrades.reduce((acc, t) => acc + (t.net_pnl || 0), 0)
+    const winRate = closedTrades.length > 0 ? (winningTrades.length / closedTrades.length) * 100 : 0
+    
+    const totalWins = winningTrades.reduce((acc, t) => acc + (t.net_pnl || 0), 0)
+    const totalLosses = losingTrades.reduce((acc, t) => acc + Math.abs(t.net_pnl || 0), 0)
+    
+    const avgWin = winningTrades.length > 0 ? totalWins / winningTrades.length : 0
+    const avgLoss = losingTrades.length > 0 ? totalLosses / losingTrades.length : 0
+    
+    const winProb = winRate / 100
+    const lossProb = 1 - winProb
+    const expectancy = (winProb * avgWin) - (lossProb * avgLoss)
+
+    return {
+      id: entry.id,
+      title: entry.title,
+      totalTradesCount,
+      closedTrades: closedTrades.length,
+      winRate,
+      totalNetPnL,
+      expectancy,
+    }
+  }).sort((a, b) => b.totalNetPnL - a.totalNetPnL)
 
   const handleOpenAdd = () => {
     setSelectedEntry(null)
@@ -150,6 +196,47 @@ export default function PlaybookPage() {
         </Button>
       </div>
 
+      {/* Performance Leaderboard */}
+      {!loading && entries.length > 0 && (
+        <Card style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Award size={18} style={{ color: 'var(--primary)' }} />
+            <h3 style={{ fontSize: '15px', fontWeight: 600 }}>Strategy & Setup Leaderboard</h3>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Setup Name</th>
+                  <th>Trades</th>
+                  <th>Win Rate</th>
+                  <th>Total Net P&L</th>
+                  <th>Expectancy</th>
+                </tr>
+              </thead>
+              <tbody>
+                {setupStats.map((stat) => {
+                  const isProfit = stat.totalNetPnL >= 0
+                  return (
+                    <tr key={stat.id}>
+                      <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{stat.title}</td>
+                      <td className="font-mono">{stat.totalTradesCount}</td>
+                      <td className="font-mono">{stat.winRate.toFixed(1)}%</td>
+                      <td className="font-mono" style={{ fontWeight: 600, color: isProfit ? 'var(--success)' : 'var(--danger)' }}>
+                        {isProfit ? '+' : ''}{formatAmount(stat.totalNetPnL, preferredCurrency)}
+                      </td>
+                      <td className="font-mono" style={{ color: stat.expectancy >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                        {stat.expectancy >= 0 ? '+' : ''}{formatAmount(stat.expectancy, preferredCurrency)}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
       {loading ? (
         <div style={{ textAlign: 'center', padding: '48px 0' }}>Loading playbook setups...</div>
       ) : entries.length === 0 ? (
@@ -162,35 +249,52 @@ export default function PlaybookPage() {
         </Card>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '24px' }}>
-          {entries.map((entry) => (
-            <Card key={entry.id} style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '16px' }}>
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <h3 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)' }}>{entry.title}</h3>
-                  <div style={{ display: 'flex', gap: '6px' }}>
-                    <button onClick={() => handleOpenEdit(entry)} className="btn btn-ghost" style={{ padding: '4px', minWidth: 'auto' }}>
-                      <Edit3 size={14} />
-                    </button>
-                    <button onClick={() => handleDelete(entry.id)} className="btn btn-ghost" style={{ padding: '4px', minWidth: 'auto', color: 'var(--danger)' }}>
-                      <Trash2 size={14} />
-                    </button>
+          {entries.map((entry) => {
+            const stats = setupStats.find((s) => s.id === entry.id)
+            return (
+              <Card key={entry.id} style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '16px' }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <h3 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)' }}>{entry.title}</h3>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button onClick={() => handleOpenEdit(entry)} className="btn btn-ghost" style={{ padding: '4px', minWidth: 'auto' }}>
+                        <Edit3 size={14} />
+                      </button>
+                      <button onClick={() => handleDelete(entry.id)} className="btn btn-ghost" style={{ padding: '4px', minWidth: 'auto', color: 'var(--danger)' }}>
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
+                  <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', margin: '8px 0' }}>
+                    {entry.tags.map((t, idx) => (
+                      <span key={idx} style={{ fontSize: '11px', backgroundColor: 'var(--bg-surface-hover)', padding: '2px 8px', borderRadius: '4px', color: 'var(--text-secondary)' }}>
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                  <div 
+                    className="tiptap-content"
+                    style={{ fontSize: '14px', color: 'var(--text-secondary)', marginTop: '12px', maxHeight: '120px', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                    dangerouslySetInnerHTML={{ __html: entry.content || '' }}
+                  />
+                  {stats && stats.totalTradesCount > 0 && (
+                    <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', borderTop: '1px solid var(--border-color)', paddingTop: '12px', marginTop: '12px', fontSize: '12px' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <TrendingUp size={12} />
+                        Trades: <strong className="font-mono">{stats.totalTradesCount}</strong>
+                      </span>
+                      <span>
+                        Win Rate: <strong className="font-mono">{stats.winRate.toFixed(0)}%</strong>
+                      </span>
+                      <span style={{ color: stats.totalNetPnL >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                        P&L: <strong className="font-mono">{stats.totalNetPnL >= 0 ? '+' : ''}{formatAmount(stats.totalNetPnL, preferredCurrency)}</strong>
+                      </span>
+                    </div>
+                  )}
                 </div>
-                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', margin: '8px 0' }}>
-                  {entry.tags.map((t, idx) => (
-                    <span key={idx} style={{ fontSize: '11px', backgroundColor: 'var(--bg-surface-hover)', padding: '2px 8px', borderRadius: '4px', color: 'var(--text-secondary)' }}>
-                      {t}
-                    </span>
-                  ))}
-                </div>
-                <div 
-                  className="tiptap-content"
-                  style={{ fontSize: '14px', color: 'var(--text-secondary)', marginTop: '12px', maxHeight: '120px', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                  dangerouslySetInnerHTML={{ __html: entry.content || '' }}
-                />
-              </div>
-            </Card>
-          ))}
+              </Card>
+            )
+          })}
         </div>
       )}
 
