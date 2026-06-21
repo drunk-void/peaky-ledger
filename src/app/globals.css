@@ -384,7 +384,7 @@ label {
 
 /* Monospace alignment for trading figures */
 .font-mono {
-  font-family: var(--font-sans);
+  font-family: var(--font-mono), monospace;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
 }
@@ -398,9 +398,6 @@ table {
 }
 
 th {
-  position: sticky;
-  top: 70px;
-  z-index: 10;
   padding: 14px 18px;
   font-size: 11px;
   text-transform: uppercase;
@@ -466,9 +463,9 @@ input[type="checkbox"]:checked::after {
 /* Floating Actions Bar (Bulk operations) */
 .bulk-actions-bar {
   position: fixed;
-  top: 86px;
+  bottom: 24px;
   left: 50%;
-  transform: translateX(-50%) translateY(-100px);
+  transform: translateX(-50%) translateY(100px);
   z-index: 100;
   display: flex;
   align-items: center;
