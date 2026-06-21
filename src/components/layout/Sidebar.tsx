@@ -37,7 +37,6 @@ export const Sidebar = () => {
 
   return (
     <aside
-      className="glassmorphism"
       style={{
         width: '260px',
         height: '100vh',
@@ -46,6 +45,7 @@ export const Sidebar = () => {
         top: 0,
         display: 'flex',
         flexDirection: 'column',
+        backgroundColor: 'var(--bg-sidebar)',
         borderRight: '1px solid var(--border-color)',
         zIndex: 50,
       }}
@@ -53,8 +53,7 @@ export const Sidebar = () => {
       {/* Brand logo section */}
       <div
         style={{
-          padding: '24px',
-          borderBottom: '1px solid var(--border-color)',
+          padding: '24px 20px',
           display: 'flex',
           alignItems: 'center',
           gap: '12px',
@@ -64,20 +63,20 @@ export const Sidebar = () => {
           style={{
             backgroundColor: 'var(--primary)',
             color: '#ffffff',
-            width: '36px',
-            height: '36px',
-            borderRadius: '8px',
+            width: '32px',
+            height: '32px',
+            borderRadius: 'var(--radius-input, 4px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             fontWeight: 'bold',
-            fontSize: '18px',
+            fontSize: '16px',
           }}
         >
           PL
         </div>
         <div>
-          <span style={{ fontSize: '18px', fontWeight: 700, letterSpacing: '-0.025em', display: 'block' }}>
+          <span style={{ fontSize: '15px', fontWeight: 600, letterSpacing: '-0.02em', display: 'block', color: 'var(--text-primary)' }}>
             Peaky Ledger
           </span>
           <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500 }}>
@@ -87,7 +86,7 @@ export const Sidebar = () => {
       </div>
 
       {/* Nav links section */}
-      <nav style={{ flex: 1, padding: '24px 16px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      <nav style={{ flex: 1, padding: '12px 12px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
         {navItems.map((item) => {
           const isActive = pathname.startsWith(item.href)
           const Icon = item.icon
@@ -96,22 +95,9 @@ export const Sidebar = () => {
             <Link
               key={item.name}
               href={item.href}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                padding: '12px 16px',
-                borderRadius: '8px',
-                color: isActive ? 'var(--primary)' : 'var(--text-secondary)',
-                backgroundColor: isActive ? 'rgba(37, 99, 235, 0.08)' : 'transparent',
-                fontWeight: isActive ? 600 : 500,
-                fontSize: '14px',
-                textDecoration: 'none',
-                transition: 'all var(--transition-fast)',
-              }}
-              className={isActive ? '' : 'btn-secondary-hover'}
+              className={isActive ? 'sidebar-link active' : 'sidebar-link'}
             >
-              <Icon size={18} />
+              <Icon size={16} />
               <span>{item.name}</span>
             </Link>
           )
@@ -119,28 +105,23 @@ export const Sidebar = () => {
       </nav>
 
       {/* Footer / Logout section */}
-      <div style={{ padding: '16px', borderTop: '1px solid var(--border-color)' }}>
+      <div style={{ padding: '12px', borderTop: '1px solid var(--border-color)' }}>
         <button
           onClick={handleSignOut}
+          className="sidebar-link"
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '12px',
+            gap: '10px',
             width: '100%',
-            padding: '12px 16px',
-            borderRadius: '8px',
             color: 'var(--danger)',
             backgroundColor: 'transparent',
             border: 'none',
-            fontWeight: 500,
-            fontSize: '14px',
             cursor: 'pointer',
             textAlign: 'left',
-            transition: 'background var(--transition-fast)',
           }}
-          className="btn-ghost"
         >
-          <LogOut size={18} />
+          <LogOut size={16} />
           <span>Sign Out</span>
         </button>
       </div>

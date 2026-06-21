@@ -32,7 +32,10 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               try {
-                const theme = localStorage.getItem('peaky-theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+                let theme = localStorage.getItem('peaky-theme');
+                if (!theme) {
+                  theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'classic-dark' : 'classic-light';
+                }
                 document.documentElement.setAttribute('data-theme', theme);
               } catch (e) {}
             `,

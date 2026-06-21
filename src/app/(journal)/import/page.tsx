@@ -424,7 +424,7 @@ function ImportPageContent() {
             </div>
             <div>
               <h3 style={{ fontSize: '18px', fontWeight: 600 }}>Universal CSV Import</h3>
-              <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Map and import from ANY broker's ledger CSV</p>
+              <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Map and import from ANY broker&apos;s ledger CSV</p>
             </div>
           </div>
 
@@ -568,7 +568,7 @@ function ImportPageContent() {
           ) : (
             <>
               <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                Upload any ledger CSV. On the next step you'll map columns like <strong>Symbol, Side, Quantity, EntryPrice</strong> to import your data correctly.
+                Upload any ledger CSV. On the next step you&apos;ll map columns like <strong>Symbol, Side, Quantity, EntryPrice</strong> to import your data correctly.
               </p>
 
               <div style={{ border: '2px dashed var(--border-color)', borderRadius: '8px', padding: '24px', textAlign: 'center', cursor: 'pointer' }}>

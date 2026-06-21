@@ -40,7 +40,6 @@ export const Header = () => {
 
   return (
     <header
-      className="glassmorphism"
       style={{
         height: '70px',
         display: 'flex',
@@ -48,6 +47,7 @@ export const Header = () => {
         justifyContent: 'space-between',
         padding: '0 32px',
         borderBottom: '1px solid var(--border-color)',
+        backgroundColor: 'var(--bg-app)',
         position: 'sticky',
         top: 0,
         zIndex: 40,
@@ -56,18 +56,20 @@ export const Header = () => {
     >
       {/* Account Selector */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <Wallet size={18} style={{ color: 'var(--text-secondary)' }} />
+        <Wallet size={16} style={{ color: 'var(--text-secondary)' }} />
         <select
           value={selectedAccountId}
           onChange={(e) => setSelectedAccountId(e.target.value)}
           style={{
             padding: '6px 12px',
-            borderRadius: '6px',
-            fontSize: '14px',
+            borderRadius: 'var(--radius-input, 4px)',
+            fontSize: '13.5px',
             fontWeight: 500,
             border: '1px solid var(--border-color)',
             backgroundColor: 'var(--bg-surface)',
-            width: '200px',
+            color: 'var(--text-primary)',
+            width: '180px',
+            outline: 'none',
           }}
         >
           <option value="all">All Accounts</option>
@@ -96,9 +98,9 @@ export const Header = () => {
           }}
           style={{
             padding: '6px 12px',
-            borderRadius: '6px',
+            borderRadius: 'var(--radius-input, 4px)',
             fontSize: '13px',
-            fontWeight: 600,
+            fontWeight: 500,
             border: '1px solid var(--border-color)',
             backgroundColor: 'var(--bg-surface)',
             color: 'var(--text-primary)',
@@ -118,23 +120,24 @@ export const Header = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div
             style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '50%',
-              backgroundColor: 'rgba(37, 99, 235, 0.1)',
+              width: '32px',
+              height: '32px',
+              borderRadius: 'var(--radius-input, 4px)',
+              backgroundColor: 'var(--bg-surface-hover)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: 'var(--primary)',
+              color: 'var(--text-secondary)',
+              border: '1px solid var(--border-color)',
             }}
           >
-            <User size={18} />
+            <User size={16} />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
+            <span style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--text-primary)', lineHeight: '1.2' }}>
               {userName}
             </span>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+            <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
               Premium Account
             </span>
           </div>
