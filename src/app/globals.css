@@ -384,7 +384,7 @@ label {
 
 /* Monospace alignment for trading figures */
 .font-mono {
-  font-family: var(--font-mono), monospace;
+  font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
 }
@@ -398,6 +398,9 @@ table {
 }
 
 th {
+  position: sticky;
+  top: 70px;
+  z-index: 10;
   padding: 14px 18px;
   font-size: 11px;
   text-transform: uppercase;
