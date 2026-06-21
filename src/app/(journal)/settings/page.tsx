@@ -8,7 +8,7 @@ import { Select } from '@/components/ui/Select'
 import { getAccounts, createAccount, getTrades, getCommissionRules, createCommissionRule, deleteCommissionRule, archiveAccount, restoreAccount, deleteAccount, getArchivedAccounts } from '@/utils/supabase/queries'
 import { createClient } from '@/utils/supabase/client'
 import { Account, BrokerType, CommissionRule, CommissionCalcType } from '@/types/journal'
-import { Settings, Plus, Download, User, Wallet, Trash2, Archive, RotateCcw } from 'lucide-react'
+import { Settings, Plus, Download, User, Wallet, Trash2, Archive, RotateCcw, Lock, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { useCurrency } from '@/utils/useCurrency'
 import { formatCurrency } from '@/utils/currency'
 import { useJournalStore } from '@/store/useJournalStore'
@@ -28,6 +28,14 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [savingProfile, setSavingProfile] = useState(false)
   const [creatingAccount, setCreatingAccount] = useState(false)
+
+  // Password / Security state
+  const [hasPassword, setHasPassword] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmNewPassword, setConfirmNewPassword] = useState('')
+  const [savingPassword, setSavingPassword] = useState(false)
+  const [passwordError, setPasswordError] = useState<string | null>(null)
+  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null)
 
   // Commission Rules state
   const [selectedRuleAccountId, setSelectedRuleAccountId] = useState('')
@@ -86,6 +94,7 @@ export default function SettingsPage() {
           default_currency: user.user_metadata?.default_currency || 'INR',
           email: user.email,
         })
+        setHasPassword(user.app_metadata?.providers?.includes('email') || false)
       }
     } catch (err) {
       console.error(err)
@@ -187,6 +196,47 @@ export default function SettingsPage() {
       alert(`Error updating profile: ${errMsg}`)
     } finally {
       setSavingProfile(false)
+    }
+  }
+
+  const handleSavePassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSavingPassword(true)
+    setPasswordError(null)
+    setPasswordSuccess(null)
+
+    if (newPassword.length < 6) {
+      setPasswordError('Password must be at least 6 characters long.')
+      setSavingPassword(false)
+      return
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      setPasswordError('Passwords do not match.')
+      setSavingPassword(false)
+      return
+    }
+
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      })
+      if (error) throw error
+
+      setPasswordSuccess(hasPassword ? 'Password updated successfully!' : 'Password created successfully!')
+      setNewPassword('')
+      setConfirmNewPassword('')
+      
+      // Reload user data to update the hasPassword status
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        setHasPassword(user.app_metadata?.providers?.includes('email') || false)
+      }
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : 'Unknown error'
+      setPasswordError(`Error saving password: ${errMsg}`)
+    } finally {
+      setSavingPassword(false)
     }
   }
 
@@ -308,6 +358,88 @@ export default function SettingsPage() {
 
             <Button type="submit" variant="primary" loading={savingProfile} style={{ marginTop: '8px' }}>
               Save Profile Changes
+            </Button>
+          </form>
+        </Card>
+
+        {/* Security Settings */}
+        <Card style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+            <Lock size={18} style={{ color: 'var(--primary)' }} />
+            <h3 style={{ fontSize: '16px', fontWeight: 700 }}>
+              {hasPassword ? 'Change Password' : 'Create Password'}
+            </h3>
+          </div>
+
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+            {hasPassword
+              ? 'Change the password used to sign in to your email account.'
+              : 'You currently sign in via Google OAuth. Set a password to enable logging in directly with your email.'}
+          </p>
+
+          {passwordError && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.2)',
+                borderRadius: '6px',
+                padding: '10px 12px',
+                color: 'var(--danger)',
+                fontSize: '12px',
+              }}
+            >
+              <AlertCircle size={14} />
+              <span>{passwordError}</span>
+            </div>
+          )}
+
+          {passwordSuccess && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                border: '1px solid rgba(16, 185, 129, 0.2)',
+                borderRadius: '6px',
+                padding: '10px 12px',
+                color: 'var(--success)',
+                fontSize: '12px',
+              }}
+            >
+              <CheckCircle2 size={14} />
+              <span>{passwordSuccess}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSavePassword} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <Input
+              id="new_password"
+              label="New Password"
+              type="password"
+              placeholder="••••••••"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              required
+              autoComplete="new-password"
+            />
+
+            <Input
+              id="confirm_new_password"
+              label="Confirm New Password"
+              type="password"
+              placeholder="••••••••"
+              value={confirmNewPassword}
+              onChange={(e) => setConfirmNewPassword(e.target.value)}
+              required
+              autoComplete="new-password"
+            />
+
+            <Button type="submit" variant="primary" loading={savingPassword} style={{ marginTop: '8px' }}>
+              {hasPassword ? 'Update Password' : 'Set Password'}
             </Button>
           </form>
         </Card>
