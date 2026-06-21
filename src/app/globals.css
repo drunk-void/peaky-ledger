@@ -463,9 +463,9 @@ input[type="checkbox"]:checked::after {
 /* Floating Actions Bar (Bulk operations) */
 .bulk-actions-bar {
   position: fixed;
-  bottom: 24px;
+  top: 86px;
   left: 50%;
-  transform: translateX(-50%) translateY(100px);
+  transform: translateX(-50%) translateY(-100px);
   z-index: 100;
   display: flex;
   align-items: center;
