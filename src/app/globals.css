@@ -71,45 +71,45 @@
 /* System Dark Mode Override */
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg-app: #080a10;
-    --bg-surface: #0e111a;
-    --bg-surface-hover: #161b29;
-    --bg-surface-glass: rgba(14, 17, 26, 0.8);
+    --bg-app: #0b0d13;
+    --bg-surface: #121522;
+    --bg-surface-hover: #1b2033;
+    --bg-surface-glass: rgba(18, 21, 34, 0.75);
     
-    --border-color: #1e2638;
-    --border-color-hover: #2e3a54;
+    --border-color: #20273a;
+    --border-color-hover: #323d5a;
     
     --text-primary: #f1f5f9;
     --text-secondary: #94a3b8;
     --text-muted: #4e5e78;
-    --text-inverse: #080a10;
+    --text-inverse: #0b0d13;
 
     --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.6);
     --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.5);
     --shadow-lg: 0 16px 32px -4px rgba(0, 0, 0, 0.7);
-    --shadow-glow: 0 0 20px rgba(92, 124, 250, 0.2);
+    --shadow-glow: 0 0 20px rgba(16, 185, 129, 0.25);
 
-    --scrollbar-thumb: #222d42;
-    --scrollbar-track: #080a10;
+    --scrollbar-thumb: #202c3d;
+    --scrollbar-track: #0b0d13;
 
-    --h-primary: 228;
-    --s-primary: 95%;
-    --l-primary: 60%;
+    --h-primary: 160;
+    --s-primary: 84%;
+    --l-primary: 48%;
     --primary: hsl(var(--h-primary), var(--s-primary), var(--l-primary));
-    --primary-hover: hsl(var(--h-primary), var(--s-primary), 70%);
-    --primary-rgb: 92, 124, 250;
+    --primary-hover: hsl(var(--h-primary), var(--s-primary), 38%);
+    --primary-rgb: 16, 185, 129;
 
-    --h-success: 145;
-    --s-success: 85%;
-    --l-success: 50%;
+    --h-success: 160;
+    --s-success: 84%;
+    --l-success: 48%;
     --success: hsl(var(--h-success), var(--s-success), var(--l-success));
-    --success-rgb: 30, 215, 96;
+    --success-rgb: 16, 185, 129;
 
-    --h-danger: 358;
-    --s-danger: 90%;
+    --h-danger: 355;
+    --s-danger: 85%;
     --l-danger: 55%;
     --danger: hsl(var(--h-danger), var(--s-danger), var(--l-danger));
-    --danger-rgb: 250, 82, 82;
+    --danger-rgb: 239, 68, 68;
   }
 }
 
@@ -156,41 +156,41 @@
 /* User Explicit Attribute Override - Dark */
 [data-theme='dark'] {
   color-scheme: dark;
-  --bg-app: #080a10;
-  --bg-surface: #0e111a;
-  --bg-surface-hover: #161b29;
-  --bg-surface-glass: rgba(14, 17, 26, 0.8);
-  --border-color: #1e2638;
-  --border-color-hover: #2e3a54;
+  --bg-app: #0b0d13;
+  --bg-surface: #121522;
+  --bg-surface-hover: #1b2033;
+  --bg-surface-glass: rgba(18, 21, 34, 0.75);
+  --border-color: #20273a;
+  --border-color-hover: #323d5a;
   --text-primary: #f1f5f9;
   --text-secondary: #94a3b8;
   --text-muted: #4e5e78;
-  --text-inverse: #080a10;
+  --text-inverse: #0b0d13;
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.6);
   --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.5);
   --shadow-lg: 0 16px 32px -4px rgba(0, 0, 0, 0.7);
-  --shadow-glow: 0 0 20px rgba(92, 124, 250, 0.2);
-  --scrollbar-thumb: #222d42;
-  --scrollbar-track: #080a10;
+  --shadow-glow: 0 0 20px rgba(16, 185, 129, 0.25);
+  --scrollbar-thumb: #202c3d;
+  --scrollbar-track: #0b0d13;
 
-  --h-primary: 228;
-  --s-primary: 95%;
-  --l-primary: 60%;
+  --h-primary: 160;
+  --s-primary: 84%;
+  --l-primary: 48%;
   --primary: hsl(var(--h-primary), var(--s-primary), var(--l-primary));
-  --primary-hover: hsl(var(--h-primary), var(--s-primary), 70%);
-  --primary-rgb: 92, 124, 250;
+  --primary-hover: hsl(var(--h-primary), var(--s-primary), 38%);
+  --primary-rgb: 16, 185, 129;
 
-  --h-success: 145;
-  --s-success: 85%;
-  --l-success: 50%;
+  --h-success: 160;
+  --s-success: 84%;
+  --l-success: 48%;
   --success: hsl(var(--h-success), var(--s-success), var(--l-success));
-  --success-rgb: 30, 215, 96;
+  --success-rgb: 16, 185, 129;
 
-  --h-danger: 358;
-  --s-danger: 90%;
+  --h-danger: 355;
+  --s-danger: 85%;
   --l-danger: 55%;
   --danger: hsl(var(--h-danger), var(--s-danger), var(--l-danger));
-  --danger-rgb: 250, 82, 82;
+  --danger-rgb: 239, 68, 68;
 }
 
 /* Base Body Styles */

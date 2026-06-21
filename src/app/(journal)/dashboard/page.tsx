@@ -16,8 +16,10 @@ import {
   ArrowDownRight,
   DollarSign, 
   Activity, 
-  Sparkles
+  Sparkles,
+  ExternalLink
 } from 'lucide-react'
+import { Badge } from '@/components/ui/Badge'
 import {
   AreaChart,
   Area,
@@ -33,7 +35,8 @@ import {
 
 export default function DashboardPage() {
   const { dateRange, selectedAccountId } = useJournalStore()
-  const [trades, setTrades] = useState<Trade[]>([])
+  const [closedTrades, setClosedTrades] = useState<Trade[]>([])
+  const [openPositions, setOpenPositions] = useState<Trade[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -44,12 +47,27 @@ export default function DashboardPage() {
         const activeAccounts = await getAccounts()
         setAccounts(activeAccounts)
 
-        const fetchedTrades = await getTrades({
+        // Query closed trades in the date range
+        const closedTradesPromise = getTrades({
           accountId: selectedAccountId,
           fromDate: dateRange.from,
           toDate: dateRange.to,
+          status: 'CLOSED',
         })
-        setTrades(fetchedTrades)
+
+        // Query all open positions (no date range constraint)
+        const openPositionsPromise = getTrades({
+          accountId: selectedAccountId,
+          status: 'OPEN',
+        })
+
+        const [fetchedClosed, fetchedOpen] = await Promise.all([
+          closedTradesPromise,
+          openPositionsPromise
+        ])
+
+        setClosedTrades(fetchedClosed)
+        setOpenPositions(fetchedOpen)
       } catch (err) {
         console.error(err)
       } finally {
@@ -69,8 +87,8 @@ export default function DashboardPage() {
   const startingBalanceRate = rates[startingBalanceCurrency.toUpperCase()] !== undefined ? rates[startingBalanceCurrency.toUpperCase()] : 1
   const startingBalance = startingBalanceRaw * startingBalanceRate
 
-  // Convert all trades to the preferred currency before calculating metrics
-  const convertedTrades = trades.map((t) => {
+  // Convert closed trades to preferred currency before calculating metrics
+  const convertedClosedTrades = closedTrades.map((t) => {
     const rate = rates[(t.currency || 'INR').toUpperCase()] !== undefined ? rates[(t.currency || 'INR').toUpperCase()] : 1
     return {
       ...t,
@@ -82,7 +100,20 @@ export default function DashboardPage() {
     }
   })
 
-  const metrics = calculateMetrics(convertedTrades, startingBalance)
+  // Convert open positions to preferred currency
+  const convertedOpenPositions = openPositions.map((t) => {
+    const rate = rates[(t.currency || 'INR').toUpperCase()] !== undefined ? rates[(t.currency || 'INR').toUpperCase()] : 1
+    return {
+      ...t,
+      entry_price: t.entry_price * rate,
+      exit_price: null,
+      gross_pnl: null,
+      fees: t.fees * rate,
+      net_pnl: null,
+    }
+  })
+
+  const metrics = calculateMetrics(convertedClosedTrades, startingBalance)
 
   const stats = [
     { 
@@ -137,7 +168,18 @@ export default function DashboardPage() {
         {stats.map((stat, i) => {
           const Icon = stat.icon
           return (
-            <Card key={i} hoverable className="glow-hover" style={{ position: 'relative', overflow: 'hidden' }}>
+            <Card 
+              key={i} 
+              hoverable 
+              className="glow-hover" 
+              style={{ 
+                position: 'relative', 
+                overflow: 'hidden',
+                borderLeft: stat.name === 'Net P&L' 
+                  ? `4px solid ${stat.isPositive ? 'var(--success)' : 'var(--danger)'}` 
+                  : undefined
+              }}
+            >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary)' }}>
                   {stat.name}
@@ -183,7 +225,7 @@ export default function DashboardPage() {
               <AreaChart data={metrics.equityCurve} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.2}/>
+                    <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.3}/>
                     <stop offset="95%" stopColor="var(--primary)" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
@@ -201,7 +243,7 @@ export default function DashboardPage() {
                   contentStyle={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-color)', borderRadius: '8px', fontFamily: 'var(--font-mono)', fontSize: '12px' }}
                   labelStyle={{ color: 'var(--text-secondary)', fontWeight: 600 }}
                 />
-                <Area type="monotone" dataKey="balance" stroke="var(--primary)" strokeWidth={2} fillOpacity={1} fill="url(#colorBalance)" />
+                <Area type="monotone" dataKey="balance" stroke="var(--primary)" strokeWidth={2.5} fillOpacity={1} fill="url(#colorBalance)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -239,6 +281,89 @@ export default function DashboardPage() {
           </div>
         </Card>
       </div>
+
+      {/* Active Open Positions */}
+      <Card style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Activity size={18} style={{ color: 'var(--primary)' }} />
+            <h3 style={{ fontSize: '16px', fontWeight: 600 }}>Active Open Positions</h3>
+          </div>
+          <a
+            href="/trades?status=OPEN"
+            style={{
+              color: 'var(--primary)',
+              textDecoration: 'none',
+              fontWeight: 600,
+              fontSize: '13px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              transition: 'color var(--transition-fast)'
+            }}
+          >
+            <span>Manage in Trade Log</span>
+            <ExternalLink size={14} />
+          </a>
+        </div>
+
+        {convertedOpenPositions.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text-muted)', fontSize: '14px' }}>
+            No active open positions. Create one in the Trade Log.
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto', margin: '0 -24px -24px' }}>
+            <table style={{ minWidth: '600px' }}>
+              <thead>
+                <tr>
+                  <th style={{ borderBottom: '1px solid var(--border-color)', padding: '12px 24px' }}>Symbol</th>
+                  <th style={{ borderBottom: '1px solid var(--border-color)', padding: '12px 24px' }}>Side</th>
+                  <th style={{ borderBottom: '1px solid var(--border-color)', padding: '12px 24px' }}>Qty</th>
+                  <th style={{ borderBottom: '1px solid var(--border-color)', padding: '12px 24px' }}>Entry Price</th>
+                  <th style={{ borderBottom: '1px solid var(--border-color)', padding: '12px 24px' }}>Est. Cost</th>
+                  <th style={{ borderBottom: '1px solid var(--border-color)', padding: '12px 24px' }}>Entry Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {convertedOpenPositions.map((pos) => {
+                  const estCost = pos.quantity * pos.entry_price
+                  return (
+                    <tr key={pos.id}>
+                      <td style={{ fontWeight: 600, color: 'var(--text-primary)', padding: '12px 24px' }}>
+                        {pos.display_symbol || pos.symbol}
+                        <div style={{ display: 'inline-block', marginLeft: '8px' }}>
+                          <Badge variant="secondary" style={{ fontSize: '10px' }}>{pos.asset_class}</Badge>
+                        </div>
+                      </td>
+                      <td style={{ padding: '12px 24px' }}>
+                        <Badge variant={pos.side === 'LONG' ? 'success' : 'danger'}>
+                          {pos.side}
+                        </Badge>
+                      </td>
+                      <td className="font-mono" style={{ padding: '12px 24px' }}>{pos.quantity}</td>
+                      <td className="font-mono" style={{ padding: '12px 24px' }}>
+                        {formatCurrency(pos.entry_price, preferredCurrency)}
+                      </td>
+                      <td className="font-mono" style={{ padding: '12px 24px' }}>
+                        {formatCurrency(estCost, preferredCurrency)}
+                      </td>
+                      <td className="font-mono" style={{ fontSize: '13px', padding: '12px 24px' }}>
+                        {new Date(pos.entry_time).toLocaleString('en-IN', {
+                          day: '2-digit',
+                          month: 'short',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          hour12: true
+                        })}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
 
       {/* Advanced Performance Stats */}
       <Card style={{ padding: '24px' }}>
