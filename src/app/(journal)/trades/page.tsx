@@ -13,7 +13,9 @@ import {
   Edit3, 
   Filter,
   TrendingUp,
-  Download
+  Download,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react'
 import { getTrades, createTrade, updateTrade, deleteTrade, deleteTrades, getAccounts, getTags, createTag, createAccount, getCommissionRules } from '@/utils/supabase/queries'
 import { Trade, Account, Tag, AssetClass, TradeSide, TradeEmotion, CommissionRule } from '@/types/journal'
@@ -22,6 +24,22 @@ import { useCurrency } from '@/utils/useCurrency'
 import { format } from 'date-fns'
 import ScreenshotUploader from '@/components/ui/ScreenshotUploader'
 import { createClient } from '@/utils/supabase/client'
+import { AgGridReact } from 'ag-grid-react'
+import { themeQuartz, AllCommunityModule, ModuleRegistry, ColDef } from 'ag-grid-community'
+
+// Register AG Grid Modules
+ModuleRegistry.registerModules([AllCommunityModule]);
+
+const peakyTheme = themeQuartz.withParams({
+  accentColor: '#2383E2',
+  backgroundColor: 'var(--bg-surface)',
+  foregroundColor: 'var(--text-primary)',
+  borderColor: 'var(--border-color)',
+  headerBackgroundColor: 'var(--bg-surface)',
+  oddRowBackgroundColor: 'rgba(0,0,0, 0.02)',
+  rowBorder: '1px solid var(--border-color)',
+  headerFontSize: 12,
+});
 
 
 export default function TradesPage() {
@@ -384,6 +402,161 @@ export default function TradesPage() {
     document.body.removeChild(link)
   }
 
+  // AG Grid setup
+  const onSelectionChanged = useCallback((event: any) => {
+    const selectedRows = event.api.getSelectedRows();
+    setSelectedTradeIds(selectedRows.map((r: Trade) => r.id));
+  }, []);
+
+  const colDefs: ColDef<Trade>[] = React.useMemo(() => [
+    {
+      headerName: '',
+      field: 'id',
+      headerCheckboxSelection: true,
+      checkboxSelection: true,
+      width: 50,
+      pinned: 'left',
+      suppressMenu: true,
+    },
+    {
+      headerName: 'Symbol',
+      field: 'symbol',
+      filter: 'agTextColumnFilter',
+      minWidth: 280,
+      flex: 1,
+      cellRenderer: (params: any) => {
+        const trade = params.data
+        if (!trade) return null;
+        return (
+          <div style={{ fontWeight: 600, color: 'var(--text-primary)', paddingTop: '10px' }}>
+            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {trade.display_symbol || trade.symbol}
+            </div>
+            <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
+              <Badge variant="secondary" style={{ fontSize: '10px' }}>{trade.asset_class}</Badge>
+              {trade.tags?.map((t: any) => (
+                <span 
+                  key={t.id} 
+                  style={{ 
+                    fontSize: '10px', 
+                    backgroundColor: 'rgba(99, 102, 241, 0.1)', 
+                    color: 'var(--primary)',
+                    padding: '1px 6px',
+                    borderRadius: '4px',
+                    fontWeight: 500
+                  }}
+                >
+                  {t.name}
+                </span>
+              ))}
+            </div>
+          </div>
+        )
+      }
+    },
+    {
+      headerName: 'Side',
+      field: 'side',
+      filter: 'agTextColumnFilter',
+      width: 100,
+      cellRenderer: (params: any) => {
+        const side = params.value
+        if (!side) return null;
+        return <Badge variant={side === 'LONG' ? 'primary' : 'danger'}>{side}</Badge>
+      }
+    },
+    {
+      headerName: 'Qty',
+      field: 'quantity',
+      filter: 'agNumberColumnFilter',
+      width: 100,
+      cellRenderer: (params: any) => <span className="font-mono">{params.value}</span>
+    },
+    {
+      headerName: 'Entry Price',
+      field: 'entry_price',
+      filter: 'agNumberColumnFilter',
+      width: 120,
+      cellRenderer: (params: any) => {
+        if (!params.value) return null;
+        return <span className="font-mono">{formatAmount(Number(params.value), params.data.currency)}</span>
+      }
+    },
+    {
+      headerName: 'Exit Price',
+      field: 'exit_price',
+      filter: 'agNumberColumnFilter',
+      width: 120,
+      cellRenderer: (params: any) => {
+        const val = params.value
+        return <span className="font-mono">{val ? formatAmount(Number(val), params.data.currency) : '—'}</span>
+      }
+    },
+    {
+      headerName: 'Net P&L',
+      field: 'net_pnl',
+      filter: 'agNumberColumnFilter',
+      width: 120,
+      cellRenderer: (params: any) => {
+        const trade = params.data
+        if (!trade) return null;
+        const isProfit = (trade.net_pnl ?? 0) >= 0
+        return (
+          <span className="font-mono" style={{ fontWeight: 600, color: trade.exit_price ? (isProfit ? 'var(--success)' : 'var(--danger)') : 'var(--text-secondary)' }}>
+            {trade.exit_price ? `${isProfit ? '+' : ''}${formatAmount(Number(trade.net_pnl), trade.currency)}` : 'Open'}
+          </span>
+        )
+      }
+    },
+    {
+      headerName: 'Setup',
+      field: 'setup',
+      filter: 'agTextColumnFilter',
+      width: 120,
+      cellRenderer: (params: any) => <span style={{ fontSize: '13px' }}>{params.value || '—'}</span>
+    },
+    {
+      headerName: 'Date',
+      field: 'entry_time',
+      filter: 'agDateColumnFilter',
+      width: 120,
+      cellRenderer: (params: any) => {
+        if (!params.value) return null;
+        return <span className="font-mono" style={{ fontSize: '13px' }}>{format(new Date(params.value), 'dd MMM yy')}</span>
+      }
+    },
+    {
+      headerName: 'Actions',
+      width: 100,
+      pinned: 'right',
+      suppressMenu: true,
+      cellRenderer: (params: any) => {
+        const trade = params.data
+        if (!trade) return null;
+        return (
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ display: 'inline-flex', gap: '8px' }}>
+              <button
+                onClick={() => handleOpenEditModal(trade)}
+                className="btn btn-ghost"
+                style={{ padding: '6px', minWidth: 'auto', color: 'var(--text-secondary)' }}
+              >
+                <Edit3 size={15} />
+              </button>
+              <button
+                onClick={() => handleDeleteTrade(trade.id)}
+                className="btn btn-ghost"
+                style={{ padding: '6px', minWidth: 'auto', color: 'var(--danger)' }}
+              >
+                <Trash2 size={15} />
+              </button>
+            </div>
+          </div>
+        )
+      }
+    }
+  ], [tags, accounts, formatAmount])
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }} className="animate-fade-in">
       {/* Header */}
@@ -395,6 +568,12 @@ export default function TradesPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
+          {selectedTradeIds.length > 0 && (
+            <Button variant="danger" onClick={handleBulkDelete} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Trash2 size={16} />
+              <span>Delete {selectedTradeIds.length} Selected</span>
+            </Button>
+          )}
           <Button variant="secondary" onClick={handleExportCsv} style={{ display: 'flex', alignItems: 'center', gap: '8px' }} disabled={trades.length === 0}>
             <Download size={16} />
             <span>Export CSV</span>
@@ -469,134 +648,27 @@ export default function TradesPage() {
           </p>
         </Card>
       ) : (
-        <Card style={{ overflowX: 'auto', padding: '0' }}>
-          <table>
-            <thead>
-              <tr>
-                <th className="td-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={trades.length > 0 && selectedTradeIds.length === trades.length}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedTradeIds(trades.map((t) => t.id))
-                      } else {
-                        setSelectedTradeIds([])
-                      }
-                    }}
-                  />
-                </th>
-                <th>Symbol</th>
-                <th>Side</th>
-                <th>Qty</th>
-                <th>Entry Price</th>
-                <th>Exit Price</th>
-                <th>Net P&L</th>
-                <th>Setup</th>
-                <th>Date</th>
-                <th style={{ textAlign: 'right' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {trades.map((trade) => {
-                const isProfit = (trade.net_pnl ?? 0) >= 0
-                const isSelected = selectedTradeIds.includes(trade.id)
-                return (
-                  <tr key={trade.id} style={{ backgroundColor: isSelected ? 'var(--bg-surface-hover)' : undefined }}>
-                    <td className="td-checkbox">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedTradeIds([...selectedTradeIds, trade.id])
-                          } else {
-                            setSelectedTradeIds(selectedTradeIds.filter((id) => id !== trade.id))
-                          }
-                        }}
-                      />
-                    </td>
-                    <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                      {trade.display_symbol || trade.symbol}
-                      <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
-                        <Badge variant="secondary" style={{ fontSize: '10px' }}>{trade.asset_class}</Badge>
-                        {trade.tags?.map((t) => (
-                          <span 
-                            key={t.id} 
-                            style={{ 
-                              fontSize: '10px', 
-                              backgroundColor: 'rgba(99, 102, 241, 0.1)', 
-                              color: 'var(--primary)',
-                              padding: '1px 6px',
-                              borderRadius: '4px',
-                              fontWeight: 500
-                            }}
-                          >
-                            {t.name}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td>
-                      <Badge variant={trade.side === 'LONG' ? 'primary' : 'danger'}>
-                        {trade.side}
-                      </Badge>
-                    </td>
-                    <td className="font-mono">{trade.quantity}</td>
-                    <td className="font-mono">{formatAmount(Number(trade.entry_price), trade.currency)}</td>
-                    <td className="font-mono">{trade.exit_price ? formatAmount(Number(trade.exit_price), trade.currency) : '—'}</td>
-                    <td className="font-mono" style={{ fontWeight: 600, color: trade.exit_price ? (isProfit ? 'var(--success)' : 'var(--danger)') : 'var(--text-secondary)' }}>
-                      {trade.exit_price ? `${isProfit ? '+' : ''}${formatAmount(Number(trade.net_pnl), trade.currency)}` : 'Open'}
-                    </td>
-                    <td style={{ fontSize: '13px' }}>{trade.setup || '—'}</td>
-                    <td className="font-mono" style={{ fontSize: '13px' }}>{format(new Date(trade.entry_time), 'dd MMM yy')}</td>
-                    <td style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'inline-flex', gap: '8px' }}>
-                        <button
-                          onClick={() => handleOpenEditModal(trade)}
-                          className="btn btn-ghost"
-                          style={{ padding: '6px', minWidth: 'auto', color: 'var(--text-secondary)' }}
-                        >
-                          <Edit3 size={15} />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteTrade(trade.id)}
-                          className="btn btn-ghost"
-                          style={{ padding: '6px', minWidth: 'auto', color: 'var(--danger)' }}
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+        <Card style={{ padding: '0', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ width: '100%', height: 'calc(100vh - 280px)' }}>
+            <AgGridReact
+              rowData={trades}
+              columnDefs={colDefs}
+              theme={peakyTheme}
+              rowSelection="multiple"
+              onSelectionChanged={onSelectionChanged}
+              pagination={true}
+              paginationPageSize={20}
+              paginationPageSizeSelector={[10, 20, 50, 100]}
+              defaultColDef={{
+                sortable: true,
+                filter: true,
+                resizable: true,
+              }}
+              rowHeight={64}
+            />
+          </div>
         </Card>
       )}
-
-      {/* Floating Bulk Actions Bar */}
-      <div className={`bulk-actions-bar glassmorphism ${selectedTradeIds.length > 0 ? 'active' : ''}`} style={{ backgroundColor: 'var(--bg-surface)' }}>
-        <span style={{ fontSize: '14px', fontWeight: 600 }}>
-          {selectedTradeIds.length} trade{selectedTradeIds.length > 1 ? 's' : ''} selected
-        </span>
-        <Button 
-          variant="danger" 
-          onClick={handleBulkDelete}
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px' }}
-        >
-          <Trash2 size={16} />
-          <span>Delete Selected</span>
-        </Button>
-        <Button 
-          variant="secondary" 
-          onClick={() => setSelectedTradeIds([])}
-          style={{ padding: '8px 16px' }}
-        >
-          Cancel
-        </Button>
-      </div>
 
       {/* Add / Edit Modals */}
       <Modal isOpen={isAddModalOpen || isEditModalOpen} onClose={() => { setIsAddModalOpen(false); setIsEditModalOpen(false); }} title={isAddModalOpen ? 'Add New Trade' : 'Edit Trade'}>

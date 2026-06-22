@@ -1,5 +1,7 @@
 import crypto from 'crypto'
-import { Trade } from '@/types/journal'
+import { Trade, CommissionRule } from '@/types/journal'
+import { TradeEngine, ExecutionLeg } from './tradeEngine'
+import { parseBrokerSymbol } from './symbolParser'
 
 export interface BrokerAdapter {
   getAuthUrl(accountId?: string): string
@@ -13,7 +15,8 @@ export interface BrokerAdapter {
       symbol?: string
       segmentType?: string
       exchangeType?: string
-    }
+    },
+    commissionRules?: CommissionRule[]
   ): Promise<Partial<Trade>[]>
   fetchRealisedPnL?(
     accessToken: string,
@@ -81,7 +84,8 @@ export class FyersAdapter implements BrokerAdapter {
       symbol?: string
       segmentType?: string
       exchangeType?: string
-    }
+    },
+    commissionRules: CommissionRule[] = []
   ): Promise<Partial<Trade>[]> {
     const symbolParam = params.symbol ? `&symbol=${encodeURIComponent(params.symbol)}` : ''
     const segmentType = params.segmentType || '0'
@@ -132,28 +136,30 @@ export class FyersAdapter implements BrokerAdapter {
       }
     }
 
-    // Map Fyers trade fields to our standard Trade type
-    return allTrades.map((t) => {
+    const executionLegs: ExecutionLeg[] = allTrades.map((t) => {
       const side: 'LONG' | 'SHORT' = t.side === 1 ? 'LONG' : 'SHORT'
       
+      const parsed = parseBrokerSymbol(t.symbol)
+      const displaySymbol = (parsed.isDerivative || parsed.series) ? parsed.formattedString : (t.description || parsed.formattedString)
+      
       return {
-        external_trade_id: t.tradeNumber,
+        id: t.tradeNumber,
         symbol: t.symbol,
-        display_symbol: t.description || t.symbol.split(':').pop() || t.symbol,
-        asset_class: this.mapSegmentToAssetClass(t.segment),
+        display_symbol: displaySymbol,
+        asset_class: parsed.optionType ? 'options' : (parsed.isDerivative ? 'futures' : this.mapSegmentToAssetClass(t.segment)),
         exchange: this.mapExchange(t.exchange),
         side,
         quantity: Number(t.traded_qty),
-        entry_price: Number(t.trade_price),
-        entry_time: this.parseDateTime(t.orderDateTime),
-        gross_pnl: null, // calculated when pairing
-        net_pnl: null,
-        fees: 0, // calculated from Fyers fee models or provided
-        currency: 'INR',
-        status: 'CLOSED', // individual trade reports represent executed trades
-        source: 'fyers_api',
+        price: Number(t.trade_price),
+        timestamp: this.parseDateTime(t.orderDateTime),
       }
     })
+
+    // Process chronological executions through the generic TradeEngine
+    // Note: Fyers API usually returns trades in chronological order, but we sort to be safe
+    executionLegs.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+
+    return TradeEngine.processExecutions(executionLegs, commissionRules)
   }
 
   async fetchRealisedPnL(
@@ -193,19 +199,22 @@ export class FyersAdapter implements BrokerAdapter {
       }
     }
 
-    return allPnL.map((t) => {
+    return allPnL.filter(t => !!t.symbol).map((t) => {
       const qty = Number(t.qty || t.quantity || t.traded_qty || 0)
       const entryPrice = Number(t.buy_avg || t.buy_price || t.entry_price || 0)
       const exitPrice = Number(t.sell_avg || t.sell_price || t.exit_price || 0)
       const pnl = Number(t.realized_profit || t.pnl || t.net_pnl || 0)
       
       const side = 'LONG' 
+      
+      const parsed = parseBrokerSymbol(t.symbol)
+      const displaySymbol = (parsed.isDerivative || parsed.series) ? parsed.formattedString : (t.description || parsed.formattedString)
 
       return {
         external_trade_id: t.id || t.tradeNumber || `${t.symbol}_pnl_${t.entry_date || params.fromDate}`,
         symbol: t.symbol,
-        display_symbol: t.description || t.symbol?.split(':').pop() || t.symbol,
-        asset_class: this.mapSegmentToAssetClass(t.segment || 10),
+        display_symbol: displaySymbol,
+        asset_class: parsed.optionType ? 'options' : (parsed.isDerivative ? 'futures' : this.mapSegmentToAssetClass(t.segment || 10)),
         exchange: this.mapExchange(t.exchange || 10),
         side,
         quantity: qty,
@@ -235,7 +244,7 @@ export class FyersAdapter implements BrokerAdapter {
 
     const rawPositions = resData.netPositions || resData.data || []
 
-    return rawPositions.map((p: FyersPositionRecord) => {
+    return rawPositions.filter((p: FyersPositionRecord) => !!p.symbol).map((p: FyersPositionRecord) => {
       const netQty = Number(p.netQty || 0)
       const isClosed = netQty === 0
       
@@ -245,12 +254,15 @@ export class FyersAdapter implements BrokerAdapter {
       const pnl = Number(p.realized_profit || p.pl || 0)
       
       const side = (p.side === 1 || netQty > 0) ? 'LONG' : 'SHORT'
+      
+      const parsed = parseBrokerSymbol(p.symbol)
+      const displaySymbol = (parsed.isDerivative || parsed.series) ? parsed.formattedString : (parsed.formattedString)
 
       return {
         external_trade_id: p.id || p.positionId || `${p.symbol}_pos_${new Date().toISOString().split('T')[0]}`,
         symbol: p.symbol,
-        display_symbol: p.symbol?.split(':').pop() || p.symbol,
-        asset_class: this.mapSegmentToAssetClass(p.segment || 10),
+        display_symbol: displaySymbol,
+        asset_class: parsed.optionType ? 'options' : (parsed.isDerivative ? 'futures' : this.mapSegmentToAssetClass(p.segment || 10)),
         exchange: this.mapExchange(p.exchange || 10),
         side,
         quantity: qty,

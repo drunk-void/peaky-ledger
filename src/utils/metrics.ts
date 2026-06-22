@@ -63,10 +63,10 @@ export function calculateMetrics(trades: Trade[], startingBalance: number = 1000
     ? ((winningTrades / totalTrades) * avgWin) - ((losingTrades / totalTrades) * avgLoss) 
     : 0
 
-  // Calculate daily P&L
+  // Calculate daily P&L (Realised PnL is booked on the exit date)
   const dailyMap: Record<string, number> = {}
   closedTrades.forEach((t) => {
-    const dateStr = format(new Date(t.entry_time), 'yyyy-MM-dd')
+    const dateStr = format(new Date(t.exit_time || t.entry_time), 'yyyy-MM-dd')
     dailyMap[dateStr] = (dailyMap[dateStr] || 0) + (t.net_pnl || 0)
   })
 
@@ -79,17 +79,28 @@ export function calculateMetrics(trades: Trade[], startingBalance: number = 1000
 
   // Calculate Equity Curve
   let runningBalance = startingBalance
-  const equityCurve = [{ date: 'Start', balance: runningBalance }]
+  const equityCurve: { date: string; balance: number }[] = []
   
-  // Sort trades chronologically to build equity curve
-  const chronoTrades = [...closedTrades].sort(
-    (a, b) => new Date(a.entry_time).getTime() - new Date(b.entry_time).getTime()
-  )
-
-  chronoTrades.forEach((t) => {
-    runningBalance += t.net_pnl || 0
+  // Start with initial balance before any trades
+  if (dailyPnL.length > 0) {
+    const firstDate = new Date(dailyPnL[0].date)
+    firstDate.setDate(firstDate.getDate() - 1)
     equityCurve.push({
-      date: format(new Date(t.entry_time), 'dd MMM yyyy'),
+      date: format(firstDate, 'yyyy-MM-dd'),
+      balance: runningBalance,
+    })
+  } else {
+    equityCurve.push({
+      date: format(new Date(), 'yyyy-MM-dd'),
+      balance: runningBalance,
+    })
+  }
+
+  // Iterate over daily aggregate to avoid multiple points per day
+  dailyPnL.forEach((day) => {
+    runningBalance += day.pnl
+    equityCurve.push({
+      date: day.date,
       balance: runningBalance,
     })
   })
