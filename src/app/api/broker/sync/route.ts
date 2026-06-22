@@ -13,6 +13,8 @@ export async function GET(request: Request) {
     const segmentType = searchParams.get('segmentType') || undefined
     const exchangeType = searchParams.get('exchangeType') || undefined
     const syncMode = searchParams.get('syncMode') || 'trades'
+    const updateFeesParam = searchParams.get('updateFees') === 'true'
+    const overrideManualFees = searchParams.get('overrideManualFees') === 'true'
 
     if (!accountId) {
       return NextResponse.json({ error: 'accountId is required' }, { status: 400 })
@@ -61,6 +63,42 @@ export async function GET(request: Request) {
         decryptedToken,
         process.env.FYERS_APP_ID || ''
       )
+    } else if (syncMode === 'quick-sync') {
+      let qsFromDate = '2025-01-01'
+      const { data: latestTrade } = await supabase
+        .from('trades')
+        .select('entry_time')
+        .eq('account_id', accountId)
+        .order('entry_time', { ascending: false })
+        .limit(1)
+        .single()
+      
+      if (latestTrade && latestTrade.entry_time) {
+        qsFromDate = new Date(latestTrade.entry_time).toISOString().split('T')[0]
+      }
+      const qsToDate = new Date().toISOString().split('T')[0]
+
+      if (adapter.fetchQuickSync) {
+        rawTrades = await adapter.fetchQuickSync(
+          decryptedToken,
+          process.env.FYERS_APP_ID || '',
+          { fromDate: qsFromDate, toDate: qsToDate },
+          commissionRules || []
+        )
+      }
+    } else if (syncMode === 'todays-orders' && adapter.fetchTodaysOrders) {
+      rawTrades = await adapter.fetchTodaysOrders(
+        decryptedToken,
+        process.env.FYERS_APP_ID || '',
+        commissionRules || []
+      )
+    } else if (syncMode === 'order-history' && adapter.fetchOrderHistory) {
+      rawTrades = await adapter.fetchOrderHistory(
+        decryptedToken,
+        process.env.FYERS_APP_ID || '',
+        { fromDate, toDate, segmentType, exchangeType },
+        commissionRules || []
+      )
     } else {
       rawTrades = await adapter.fetchTrades(
         decryptedToken,
@@ -99,7 +137,8 @@ export async function GET(request: Request) {
               entry_price: incoming.entry_price || 0,
               exit_price: incoming.exit_price || null,
               quantity: incoming.quantity || 0,
-              asset_class: incoming.asset_class || 'equity'
+              asset_class: incoming.asset_class || 'equity',
+              number_of_orders: incoming.number_of_orders
             })
             finalFeesAuto = true
             finalNet = finalGross !== null ? finalGross - finalFees : null
@@ -109,12 +148,26 @@ export async function GET(request: Request) {
         }
 
         if (existing) {
-          // Preserve manual fees if the user overrode them
-          if (existing.fees_auto_calculated === false) {
+          if (updateFeesParam) {
+            // User requested to update existing fees
+            if (existing.fees_auto_calculated === false && !overrideManualFees) {
+              // Preserve manual fee
+              finalFees = existing.fees
+              finalFeesAuto = false
+            } else {
+              // Update fee (use incoming fee)
+              finalFees = incoming.fees || 0
+              finalFeesAuto = true
+            }
+          } else {
+            // Default behavior: Don't update fees on existing trades, keep what's in DB
+            // (Unless it was fully manual, which we always preserve, but here we preserve all)
             finalFees = existing.fees
-            finalFeesAuto = false
-            finalNet = finalGross !== null ? finalGross - finalFees : null
+            finalFeesAuto = existing.fees_auto_calculated
           }
+
+          // Always recalculate net based on the chosen fee and incoming gross
+          finalNet = finalGross !== null ? finalGross - finalFees : null
 
           return {
             ...incoming,
@@ -128,6 +181,7 @@ export async function GET(request: Request) {
             fees_auto_calculated: finalFeesAuto,
             net_pnl: finalNet,
             gross_pnl: finalGross,
+            number_of_orders: incoming.number_of_orders,
             account_id: accountId,
             user_id: connection.user_id,
           }
@@ -138,6 +192,7 @@ export async function GET(request: Request) {
             fees_auto_calculated: finalFeesAuto,
             net_pnl: finalNet,
             gross_pnl: finalGross,
+            number_of_orders: incoming.number_of_orders,
             account_id: accountId,
             user_id: connection.user_id,
           }

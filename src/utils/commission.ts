@@ -2,7 +2,7 @@ import { CommissionRule } from '@/types/journal'
 
 export function calculateCommission(
   rules: CommissionRule[],
-  trade: { entry_price: number; exit_price: number | null; quantity: number; asset_class: string }
+  trade: { entry_price: number; exit_price: number | null; quantity: number; asset_class: string; number_of_orders?: number }
 ): number {
   let totalFees = 0
 
@@ -20,6 +20,11 @@ export function calculateCommission(
       totalFees += Number(rule.value)
     } else if (rule.calc_type === 'per_unit') {
       totalFees += Number(rule.value) * Number(trade.quantity)
+    } else if (rule.calc_type === 'flat_per_order') {
+      // Default to 2 orders for closed trades, 1 for open if not explicitly specified
+      const defaultOrders = trade.exit_price !== null ? 2 : 1
+      const ordersCount = trade.number_of_orders ?? defaultOrders
+      totalFees += Number(rule.value) * ordersCount
     }
   }
 

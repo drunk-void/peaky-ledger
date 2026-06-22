@@ -533,3 +533,19 @@ label {
   color: var(--text-primary);
   font-weight: 600;
 }
+
+/* TipTap Editor Base Styles */
+.ProseMirror {
+  outline: none !important;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.ProseMirror > * + * {
+  margin-top: 0.75em;
+}
+
+.ProseMirror ul, 
+.ProseMirror ol {
+  padding: 0 1rem;
+}

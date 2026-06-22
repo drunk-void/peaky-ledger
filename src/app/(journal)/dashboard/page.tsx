@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react'
 import { DateRangeFilter } from '@/components/layout/DateRangeFilter'
+import { QuickSyncButton } from '@/components/layout/QuickSyncButton'
 import { Card } from '@/components/ui/Card'
 import { useJournalStore } from '@/store/useJournalStore'
 import { getTrades, getAccounts } from '@/utils/supabase/queries'
@@ -17,7 +18,8 @@ import {
   DollarSign, 
   Activity, 
   Sparkles,
-  ExternalLink
+  ExternalLink,
+  Wallet
 } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import {
@@ -38,6 +40,7 @@ export default function DashboardPage() {
   const [openPositions, setOpenPositions] = useState<Trade[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -75,7 +78,7 @@ export default function DashboardPage() {
     }
 
     fetchDashboardData()
-  }, [dateRange, selectedAccountId])
+  }, [dateRange, selectedAccountId, refreshKey])
 
   const { preferredCurrency, currencySymbol, rates } = useCurrency()
 
@@ -125,7 +128,16 @@ export default function DashboardPage() {
 
   const metrics = calculateMetrics(convertedClosedTrades, startingBalance)
 
+  const currentBalance = startingBalance + metrics.netPnL
+
   const stats = [
+    { 
+      name: 'Current Balance', 
+      value: formatCurrency(currentBalance, preferredCurrency), 
+      change: `Starting: ${formatCurrency(startingBalance, preferredCurrency)}`, 
+      isPositive: currentBalance >= startingBalance, 
+      icon: Wallet 
+    },
     { 
       name: 'Net P&L', 
       value: formatCurrency(metrics.netPnL, preferredCurrency), 
@@ -170,7 +182,10 @@ export default function DashboardPage() {
             Performance insight based on {metrics.totalTrades} trades
           </p>
         </div>
-        <DateRangeFilter />
+        <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+          <QuickSyncButton onSyncComplete={() => setRefreshKey(prev => prev + 1)} />
+          <DateRangeFilter />
+        </div>
       </div>
 
       {/* Stats Grid */}
@@ -185,7 +200,7 @@ export default function DashboardPage() {
               style={{ 
                 position: 'relative', 
                 overflow: 'hidden',
-                borderLeft: stat.name === 'Net P&L' 
+                borderLeft: (stat.name === 'Net P&L' || stat.name === 'Current Balance')
                   ? `4px solid ${stat.isPositive ? 'var(--success)' : 'var(--danger)'}` 
                   : undefined
               }}

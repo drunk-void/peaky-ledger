@@ -88,6 +88,7 @@ export default function TradesPage() {
   const [formAdherence, setFormAdherence] = useState<number | ''>('')
   const [formSelectedTags, setFormSelectedTags] = useState<string[]>([])
   const [newTagName, setNewTagName] = useState('')
+  const [formNumberOfOrders, setFormNumberOfOrders] = useState<number | ''>(2)
   
   // Commission System states
   const [feesAutoCalculated, setFeesAutoCalculated] = useState(true)
@@ -120,6 +121,7 @@ export default function TradesPage() {
         exit_price: formExitPrice === '' ? null : Number(formExitPrice),
         quantity: formQuantity,
         asset_class: formAssetClass,
+        number_of_orders: formNumberOfOrders === '' ? undefined : Number(formNumberOfOrders),
       })
       Promise.resolve().then(() => {
         setFormFees(calcFees)
@@ -191,6 +193,7 @@ export default function TradesPage() {
     setFormSatisfaction('')
     setFormAdherence('')
     setFormSelectedTags([])
+    setFormNumberOfOrders(2)
     setIsAddModalOpen(true)
   }
 
@@ -247,6 +250,7 @@ export default function TradesPage() {
         mae_price: null,
         r_multiple: null,
         duration_minutes: null,
+        number_of_orders: formNumberOfOrders === '' ? (exitPriceVal ? 2 : 1) : Number(formNumberOfOrders),
         source: 'manual',
         external_trade_id: null,
         exchange: null,
@@ -749,7 +753,7 @@ export default function TradesPage() {
             />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
             <Input
               id="formEntryTime"
               label="Entry Date & Time"
@@ -764,6 +768,16 @@ export default function TradesPage() {
               type="datetime-local"
               value={formExitTime}
               onChange={(e) => setFormExitTime(e.target.value)}
+            />
+            <Input
+              id="formNumberOfOrders"
+              label="Number of Orders"
+              type="number"
+              value={formNumberOfOrders}
+              onChange={(e) => setFormNumberOfOrders(e.target.value === '' ? '' : Number(e.target.value))}
+              min="1"
+              step="1"
+              placeholder={formExitPrice !== '' ? '2' : '1'}
             />
           </div>
 

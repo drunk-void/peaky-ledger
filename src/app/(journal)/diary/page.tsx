@@ -35,6 +35,11 @@ export default function DiaryPage() {
   const editor = useEditor({
     extensions: [StarterKit],
     content: '',
+    editorProps: {
+      attributes: {
+        style: 'min-height: 260px; padding: 16px; outline: none; word-break: break-word; overflow-wrap: break-word;'
+      }
+    }
   })
 
   useEffect(() => {
@@ -209,7 +214,7 @@ export default function DiaryPage() {
                   H2
                 </button>
               </div>
-              <div style={{ minHeight: '260px', padding: '16px', outline: 'none', color: 'var(--text-primary)', backgroundColor: 'var(--bg-surface)' }}>
+              <div style={{ outline: 'none', color: 'var(--text-primary)', backgroundColor: 'var(--bg-surface)' }}>
                 <EditorContent editor={editor} style={{ outline: 'none' }} />
               </div>
             </div>

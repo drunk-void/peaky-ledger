@@ -138,6 +138,8 @@ export class TradeEngine {
       grossPnl = (exitPrice - entryPrice) * active.exitQuantity * multiplier
     }
 
+    const numberOfOrders = active.entries.length + active.exits.length
+
     let fees = 0
     let feesAutoCalculated = false
 
@@ -148,6 +150,7 @@ export class TradeEngine {
           exit_price: exitPrice || 0,
           quantity: active.entryQuantity,
           asset_class: firstEntry.asset_class,
+          number_of_orders: numberOfOrders,
         })
         feesAutoCalculated = true
       } catch (e) {
@@ -168,6 +171,7 @@ export class TradeEngine {
       entry_time: firstEntry.timestamp,
       exit_time: lastExit ? lastExit.timestamp : null,
       status: status,
+      number_of_orders: numberOfOrders,
       gross_pnl: grossPnl,
       fees: fees,
       fees_auto_calculated: feesAutoCalculated,

@@ -27,6 +27,32 @@ export interface BrokerAdapter {
     accessToken: string,
     appId: string
   ): Promise<Partial<Trade>[]>
+  fetchOrderHistory?(
+    accessToken: string,
+    appId: string,
+    params: {
+      fromDate: string
+      toDate: string
+      symbol?: string
+      segmentType?: string
+      exchangeType?: string
+    },
+    commissionRules?: CommissionRule[]
+  ): Promise<Partial<Trade>[]>
+  fetchTodaysOrders?(
+    accessToken: string,
+    appId: string,
+    commissionRules?: CommissionRule[]
+  ): Promise<Partial<Trade>[]>
+  fetchQuickSync?(
+    accessToken: string,
+    appId: string,
+    params: {
+      fromDate: string
+      toDate: string
+    },
+    commissionRules?: CommissionRule[]
+  ): Promise<Partial<Trade>[]>
 }
 
 export class FyersAdapter implements BrokerAdapter {
@@ -160,6 +186,209 @@ export class FyersAdapter implements BrokerAdapter {
     executionLegs.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
 
     return TradeEngine.processExecutions(executionLegs, commissionRules)
+  }
+
+  async fetchOrderHistory(
+    accessToken: string,
+    appId: string,
+    params: {
+      fromDate: string
+      toDate: string
+      symbol?: string
+      segmentType?: string
+      exchangeType?: string
+    },
+    commissionRules: CommissionRule[] = []
+  ): Promise<Partial<Trade>[]> {
+    const executionLegs = await this.getRawOrderHistoryLegs(accessToken, appId, params)
+    return TradeEngine.processExecutions(executionLegs, commissionRules)
+  }
+
+  private async getRawOrderHistoryLegs(
+    accessToken: string,
+    appId: string,
+    params: {
+      fromDate: string
+      toDate: string
+      symbol?: string
+      segmentType?: string
+      exchangeType?: string
+    }
+  ): Promise<ExecutionLeg[]> {
+    const symbolParam = params.symbol ? `&symbol=${encodeURIComponent(params.symbol)}` : ''
+    const segmentType = params.segmentType || '0'
+    const exchangeType = params.exchangeType || '0'
+    const statusQuery = '&status=0'
+    
+    let allOrders: FyersOrderRecord[] = []
+    let pageNo = 1
+    const pageSize = 100
+    let hasMore = true
+
+    while (hasMore) {
+      const url = `https://api-t1.fyers.in/api/v3/order-history?exchange_type=${exchangeType}&from_date=${params.fromDate}&to_date=${params.toDate}&page_no=${pageNo}&page_size=${pageSize}&segment_type=${segmentType}${symbolParam}${statusQuery}`
+
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `${appId}:${accessToken}`,
+        },
+      })
+
+      if (!response.ok) {
+        const text = await response.text()
+        throw new Error(`Fyers API returned HTTP ${response.status}: ${text || response.statusText}`)
+      }
+
+      let resData: { s: string; message?: string; data?: FyersOrderRecord[] }
+      try {
+        resData = await response.json()
+      } catch {
+        const text = await response.text()
+        throw new Error(`Invalid JSON response from Fyers API: ${text.substring(0, 100)}`)
+      }
+
+      if (resData.s !== 'ok') {
+        throw new Error(resData.message || `Fyers API error: status ${resData.s}`)
+      }
+
+      const rawOrders = resData.data || []
+      const executedOrders = rawOrders.filter(o => o.status === 'Executed' || o.status === 2)
+      allOrders = allOrders.concat(executedOrders)
+
+      if (rawOrders.length < pageSize) {
+        hasMore = false
+      } else {
+        pageNo++
+      }
+    }
+
+    const executionLegs: ExecutionLeg[] = allOrders.map((o) => {
+      let side: 'LONG' | 'SHORT' = 'LONG'
+      if (typeof o.transaction_type === 'string') {
+        side = o.transaction_type.toUpperCase() === 'SELL' ? 'SHORT' : 'LONG'
+      } else if (typeof o.side === 'number') {
+        side = o.side === -1 ? 'SHORT' : (o.side === 1 ? 'LONG' : 'LONG')
+      }
+      
+      const parsed = parseBrokerSymbol(o.symbol)
+      const displaySymbol = (parsed.isDerivative || parsed.series) ? parsed.formattedString : (o.description || parsed.formattedString)
+      
+      const timestamp = o.trade_date_time 
+        ? new Date(Number(o.trade_date_time)).toISOString()
+        : this.parseDateTime(o.orderDateTime || o.trade_date || '')
+
+      return {
+        id: o.exchOrdId || o.id_fyers || o.id || Math.random().toString(),
+        symbol: o.symbol,
+        display_symbol: displaySymbol,
+        asset_class: parsed.optionType ? 'options' : (parsed.isDerivative ? 'futures' : this.mapSegmentToAssetClass(o.segment)),
+        exchange: this.mapExchange(o.exchange),
+        side,
+        quantity: Number(o.tradedqty || o.qty || 0),
+        price: Number(o.traded_price || o.limit_price || 0),
+        timestamp,
+      }
+    }).filter(leg => leg.quantity > 0 && leg.price > 0)
+
+    executionLegs.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+    return executionLegs
+  }
+
+  async fetchTodaysOrders(
+    accessToken: string,
+    appId: string,
+    commissionRules: CommissionRule[] = []
+  ): Promise<Partial<Trade>[]> {
+    const executionLegs = await this.getRawTodaysOrdersLegs(accessToken, appId)
+    return TradeEngine.processExecutions(executionLegs, commissionRules)
+  }
+
+  private async getRawTodaysOrdersLegs(
+    accessToken: string,
+    appId: string
+  ): Promise<ExecutionLeg[]> {
+    const url = `https://api-t1.fyers.in/api/v3/orders`
+
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `${appId}:${accessToken}`,
+      },
+    })
+
+    if (!response.ok) {
+      const text = await response.text()
+      throw new Error(`Fyers API returned HTTP ${response.status}: ${text || response.statusText}`)
+    }
+
+    const resData = await response.json() as { s: string; message?: string; orderBook?: FyersTodaysOrderRecord[] }
+
+    if (resData.s !== 'ok') {
+      throw new Error(resData.message || `Fyers API error: status ${resData.s}`)
+    }
+
+    const rawOrders = resData.orderBook || []
+    const executedOrders = rawOrders.filter(o => o.status === 2 || o.status === 'Executed')
+
+    const executionLegs: ExecutionLeg[] = executedOrders.map((o) => {
+      let side: 'LONG' | 'SHORT' = 'LONG'
+      if (typeof o.side === 'number') {
+        side = o.side === -1 ? 'SHORT' : 'LONG'
+      }
+      
+      const parsed = parseBrokerSymbol(o.symbol)
+      const displaySymbol = (parsed.isDerivative || parsed.series) ? parsed.formattedString : (o.description || parsed.formattedString)
+      
+      const timestamp = this.parseDateTime(o.orderDateTime || '')
+
+      return {
+        id: o.exchOrdId || o.id_fyers || o.id || Math.random().toString(),
+        symbol: o.symbol,
+        display_symbol: displaySymbol,
+        asset_class: parsed.optionType ? 'options' : (parsed.isDerivative ? 'futures' : this.mapSegmentToAssetClass(o.segment)),
+        exchange: this.mapExchange(o.exchange),
+        side,
+        quantity: Number(o.filledQty || o.qty || 0),
+        price: Number(o.tradedPrice || o.limitPrice || 0),
+        timestamp,
+      }
+    }).filter(leg => leg.quantity > 0 && leg.price > 0)
+
+    executionLegs.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+    return executionLegs
+  }
+
+  async fetchQuickSync(
+    accessToken: string,
+    appId: string,
+    params: {
+      fromDate: string
+      toDate: string
+    },
+    commissionRules: CommissionRule[] = []
+  ): Promise<Partial<Trade>[]> {
+    const historyLegs = await this.getRawOrderHistoryLegs(accessToken, appId, {
+      fromDate: params.fromDate,
+      toDate: params.toDate
+    })
+    
+    let todaysLegs: ExecutionLeg[] = []
+    try {
+      todaysLegs = await this.getRawTodaysOrdersLegs(accessToken, appId)
+    } catch (e) {
+      console.warn("Failed to fetch today's orders during quick sync:", e)
+    }
+    
+    // Combine and deduplicate by ID
+    const allLegs = [...historyLegs, ...todaysLegs]
+    const uniqueLegsMap = new Map<string, ExecutionLeg>()
+    for (const leg of allLegs) {
+      uniqueLegsMap.set(leg.id, leg)
+    }
+    
+    const combinedLegs = Array.from(uniqueLegsMap.values())
+    combinedLegs.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+    
+    return TradeEngine.processExecutions(combinedLegs, commissionRules)
   }
 
   async fetchRealisedPnL(
@@ -354,4 +583,41 @@ interface FyersPositionRecord {
   realized_profit?: number
   pl?: number
   side?: number
+}
+
+interface FyersOrderRecord {
+  symbol: string
+  id_fyers?: string
+  exchOrdId?: string
+  id?: string
+  exchange: number
+  segment: number
+  description?: string
+  trade_date_time?: number | string
+  orderDateTime?: string
+  trade_date?: string
+  transaction_type?: string
+  side?: number
+  status: string | number
+  qty?: number
+  tradedqty?: number
+  traded_price?: number
+  limit_price?: number
+}
+
+interface FyersTodaysOrderRecord {
+  id?: string
+  id_fyers?: string
+  exchOrdId?: string
+  symbol: string
+  exchange: number
+  segment: number
+  description?: string
+  orderDateTime?: string
+  side?: number
+  status: string | number
+  qty?: number
+  filledQty?: number
+  tradedPrice?: number
+  limitPrice?: number
 }
