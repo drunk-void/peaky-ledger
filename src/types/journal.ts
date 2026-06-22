@@ -53,6 +53,7 @@ export interface Trade {
   entry_time: string
   exit_time: string | null
   status: TradeStatus
+  number_of_orders?: number
   gross_pnl: number | null
   fees: number
   net_pnl: number | null
@@ -77,7 +78,7 @@ export interface Trade {
   tags?: Tag[]
 }
 
-export type CommissionCalcType = 'percent_of_turnover' | 'flat_per_trade' | 'per_unit'
+export type CommissionCalcType = 'percent_of_turnover' | 'flat_per_trade' | 'per_unit' | 'flat_per_order'
 
 export interface CommissionRule {
   id: string

@@ -5,10 +5,10 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
-import { getAccounts, createAccount, getTrades, getCommissionRules, createCommissionRule, deleteCommissionRule, archiveAccount, restoreAccount, deleteAccount, getArchivedAccounts } from '@/utils/supabase/queries'
+import { getAccounts, createAccount, getTrades, getCommissionRules, createCommissionRule, updateCommissionRule, deleteCommissionRule, archiveAccount, restoreAccount, deleteAccount, getArchivedAccounts } from '@/utils/supabase/queries'
 import { createClient } from '@/utils/supabase/client'
 import { Account, BrokerType, CommissionRule, CommissionCalcType } from '@/types/journal'
-import { Settings, Plus, Download, User, Wallet, Trash2, Archive, RotateCcw, Lock, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { Settings, Plus, Download, User, Wallet, Trash2, Archive, RotateCcw, Lock, AlertCircle, CheckCircle2, Edit3, X } from 'lucide-react'
 import { useCurrency } from '@/utils/useCurrency'
 import { formatCurrency } from '@/utils/currency'
 import { useJournalStore } from '@/store/useJournalStore'
@@ -46,6 +46,7 @@ export default function SettingsPage() {
   const [ruleAppliesTo, setRuleAppliesTo] = useState<string[]>([])
   const [loadingRules, setLoadingRules] = useState(false)
   const [creatingRule, setCreatingRule] = useState(false)
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null)
 
   // Account form
   const [accName, setAccName] = useState('')
@@ -141,28 +142,50 @@ export default function SettingsPage() {
     }
   }
 
-  const handleAddRule = async (e: React.FormEvent) => {
+  const handleSaveRule = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!ruleLabel.trim() || !selectedRuleAccountId) return
     setCreatingRule(true)
     try {
-      await createCommissionRule({
-        account_id: selectedRuleAccountId,
-        label: ruleLabel,
-        calc_type: ruleCalcType,
-        value: ruleValue,
-        applies_to: ruleAppliesTo,
-        is_active: true,
-      })
-      setRuleLabel('')
-      setRuleValue(0)
-      setRuleAppliesTo([])
+      if (editingRuleId) {
+        await updateCommissionRule(editingRuleId, {
+          label: ruleLabel,
+          calc_type: ruleCalcType,
+          value: ruleValue,
+          applies_to: ruleAppliesTo,
+        })
+      } else {
+        await createCommissionRule({
+          account_id: selectedRuleAccountId,
+          label: ruleLabel,
+          calc_type: ruleCalcType,
+          value: ruleValue,
+          applies_to: ruleAppliesTo,
+          is_active: true,
+        })
+      }
+      handleCancelEditRule()
       loadRules(selectedRuleAccountId)
     } catch (err) {
       console.error(err)
     } finally {
       setCreatingRule(false)
     }
+  }
+
+  const handleEditRule = (rule: CommissionRule) => {
+    setEditingRuleId(rule.id)
+    setRuleLabel(rule.label)
+    setRuleCalcType(rule.calc_type)
+    setRuleValue(rule.value)
+    setRuleAppliesTo(rule.applies_to || [])
+  }
+
+  const handleCancelEditRule = () => {
+    setEditingRuleId(null)
+    setRuleLabel('')
+    setRuleValue(0)
+    setRuleAppliesTo([])
   }
 
   const handleDeleteRule = async (id: string) => {
@@ -628,30 +651,59 @@ export default function SettingsPage() {
                   <div>
                     <div style={{ fontWeight: 600 }}>{rule.label}</div>
                     <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>
-                      {rule.calc_type === 'percent_of_turnover' ? `${rule.value}% of Turnover` : rule.calc_type === 'flat_per_trade' ? `${formatCurrency(rule.value, preferredCurrency)} Flat` : `${formatCurrency(rule.value, preferredCurrency)}/unit`}
+                      {rule.calc_type === 'percent_of_turnover' ? `${rule.value}% of Turnover` : rule.calc_type === 'flat_per_trade' ? `${formatCurrency(rule.value, preferredCurrency)} Flat` : rule.calc_type === 'flat_per_order' ? `${formatCurrency(rule.value, preferredCurrency)} Per Order` : `${formatCurrency(rule.value, preferredCurrency)}/unit`}
                       {rule.applies_to.length > 0 && ` • Applies to: ${rule.applies_to.join(', ')}`}
                     </div>
                   </div>
-                  <button
-                    onClick={() => handleDeleteRule(rule.id)}
-                    style={{
-                      border: 'none',
-                      background: 'transparent',
-                      color: 'var(--danger)',
-                      cursor: 'pointer',
-                      padding: '4px',
-                    }}
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <button
+                      onClick={() => handleEditRule(rule)}
+                      style={{
+                        border: 'none',
+                        background: 'transparent',
+                        color: 'var(--text-secondary)',
+                        cursor: 'pointer',
+                        padding: '4px',
+                      }}
+                      title="Edit Rule"
+                    >
+                      <Edit3 size={14} />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteRule(rule.id)}
+                      style={{
+                        border: 'none',
+                        background: 'transparent',
+                        color: 'var(--danger)',
+                        cursor: 'pointer',
+                        padding: '4px',
+                      }}
+                      title="Delete Rule"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
               ))
             )}
           </div>
 
-          {/* Add Rule Form */}
-          <form onSubmit={handleAddRule} style={{ display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
-            <h4 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>Add Commission Rule</h4>
+          {/* Add/Edit Rule Form */}
+          <form onSubmit={handleSaveRule} style={{ display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h4 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                {editingRuleId ? 'Edit Commission Rule' : 'Add Commission Rule'}
+              </h4>
+              {editingRuleId && (
+                <button
+                  type="button"
+                  onClick={handleCancelEditRule}
+                  style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer' }}
+                >
+                  <X size={12} /> Cancel Edit
+                </button>
+              )}
+            </div>
             
             <Input
               id="ruleLabel"
@@ -669,6 +721,7 @@ export default function SettingsPage() {
                 options={[
                   { value: 'percent_of_turnover', label: '% Turnover' },
                   { value: 'flat_per_trade', label: 'Flat Fee' },
+                  { value: 'flat_per_order', label: 'Absolute Per Order' },
                   { value: 'per_unit', label: 'Per Unit' }
                 ]}
               />
@@ -705,10 +758,16 @@ export default function SettingsPage() {
               <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>*Leave unchecked to apply to all asset classes.</span>
             </div>
 
-            <Button type="submit" variant="secondary" loading={creatingRule}>
-              <Plus size={14} />
-              <span>Add Rule</span>
-            </Button>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <Button type="submit" variant="secondary" loading={creatingRule} style={{ flex: 1 }}>
+                {editingRuleId ? 'Save Changes' : (
+                  <>
+                    <Plus size={14} />
+                    <span>Add Rule</span>
+                  </>
+                )}
+              </Button>
+            </div>
           </form>
         </Card>
 

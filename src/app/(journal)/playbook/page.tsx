@@ -67,6 +67,11 @@ export default function PlaybookPage() {
   const editor = useEditor({
     extensions: [StarterKit],
     content: '',
+    editorProps: {
+      attributes: {
+        style: 'min-height: 200px; padding: 12px; outline: none; word-break: break-word; overflow-wrap: break-word;'
+      }
+    }
   })
 
   const fetchEntries = async () => {
@@ -204,28 +209,28 @@ export default function PlaybookPage() {
             <h3 style={{ fontSize: '15px', fontWeight: 600 }}>Strategy & Setup Leaderboard</h3>
           </div>
           <div style={{ overflowX: 'auto' }}>
-            <table>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
                 <tr>
-                  <th>Setup Name</th>
-                  <th>Trades</th>
-                  <th>Win Rate</th>
-                  <th>Total Net P&L</th>
-                  <th>Expectancy</th>
+                  <th style={{ padding: '12px 8px', borderBottom: '2px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600 }}>Setup Name</th>
+                  <th style={{ padding: '12px 8px', borderBottom: '2px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600 }}>Trades</th>
+                  <th style={{ padding: '12px 8px', borderBottom: '2px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600 }}>Win Rate</th>
+                  <th style={{ padding: '12px 8px', borderBottom: '2px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600 }}>Total Net P&L</th>
+                  <th style={{ padding: '12px 8px', borderBottom: '2px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600 }}>Expectancy</th>
                 </tr>
               </thead>
               <tbody>
                 {setupStats.map((stat) => {
                   const isProfit = stat.totalNetPnL >= 0
                   return (
-                    <tr key={stat.id}>
-                      <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{stat.title}</td>
-                      <td className="font-mono">{stat.totalTradesCount}</td>
-                      <td className="font-mono">{stat.winRate.toFixed(1)}%</td>
-                      <td className="font-mono" style={{ fontWeight: 600, color: isProfit ? 'var(--success)' : 'var(--danger)' }}>
+                    <tr key={stat.id} style={{ borderBottom: '1px solid var(--border-color)', transition: 'background-color 0.2s' }}>
+                      <td style={{ padding: '12px 8px', fontWeight: 600, color: 'var(--text-primary)' }}>{stat.title}</td>
+                      <td className="font-mono" style={{ padding: '12px 8px' }}>{stat.totalTradesCount}</td>
+                      <td className="font-mono" style={{ padding: '12px 8px' }}>{stat.winRate.toFixed(1)}%</td>
+                      <td className="font-mono" style={{ padding: '12px 8px', fontWeight: 600, color: isProfit ? 'var(--success)' : 'var(--danger)' }}>
                         {isProfit ? '+' : ''}{formatAmount(stat.totalNetPnL, preferredCurrency)}
                       </td>
-                      <td className="font-mono" style={{ color: stat.expectancy >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                      <td className="font-mono" style={{ padding: '12px 8px', color: stat.expectancy >= 0 ? 'var(--success)' : 'var(--danger)' }}>
                         {stat.expectancy >= 0 ? '+' : ''}{formatAmount(stat.expectancy, preferredCurrency)}
                       </td>
                     </tr>
@@ -319,12 +324,12 @@ export default function PlaybookPage() {
           />
 
           {/* TipTap Rich Editor */}
-          <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden' }}>
-            <EditorToolbar editor={editor} />
-            <div style={{ minHeight: '200px', padding: '12px', outline: 'none', color: 'var(--text-primary)', backgroundColor: 'var(--bg-surface)' }}>
-              <EditorContent editor={editor} style={{ outline: 'none' }} />
+            <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden' }}>
+              <EditorToolbar editor={editor} />
+              <div style={{ outline: 'none', color: 'var(--text-primary)', backgroundColor: 'var(--bg-surface)' }}>
+                <EditorContent editor={editor} style={{ outline: 'none' }} />
+              </div>
             </div>
-          </div>
 
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
             <Button type="button" variant="secondary" onClick={() => setIsModalOpen(false)}>

@@ -76,6 +76,9 @@ CREATE TABLE IF NOT EXISTS public.trades (
   -- Import source
   source TEXT DEFAULT 'manual',                -- 'fyers_api', 'csv_import', 'manual'
   
+  -- Number of execution legs (used for per-order fee rules)
+  number_of_orders INTEGER DEFAULT 2,
+  
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now(),
   UNIQUE(account_id, external_trade_id)
@@ -223,7 +226,7 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- Commission rule types
-CREATE TYPE public.commission_calc_type AS ENUM ('percent_of_turnover', 'flat_per_trade', 'per_unit');
+CREATE TYPE public.commission_calc_type AS ENUM ('percent_of_turnover', 'flat_per_trade', 'per_unit', 'flat_per_order');
 
 -- Commission rules (per-account, stackable)
 CREATE TABLE IF NOT EXISTS public.commission_rules (

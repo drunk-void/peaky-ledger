@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react'
 import { DateRangeFilter } from '@/components/layout/DateRangeFilter'
+import { QuickSyncButton } from '@/components/layout/QuickSyncButton'
 import { Card } from '@/components/ui/Card'
 import { useJournalStore } from '@/store/useJournalStore'
 import { getTrades, getAccounts } from '@/utils/supabase/queries'
@@ -17,21 +18,21 @@ import {
   DollarSign, 
   Activity, 
   Sparkles,
-  ExternalLink
+  ExternalLink,
+  Wallet
 } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import {
-  AreaChart,
-  Area,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  BarChart,
-  Bar,
   Cell
 } from 'recharts'
+import { EquityCurveChart } from '@/components/ui/EquityCurveChart'
 
 export default function DashboardPage() {
   const { dateRange, selectedAccountId } = useJournalStore()
@@ -39,6 +40,7 @@ export default function DashboardPage() {
   const [openPositions, setOpenPositions] = useState<Trade[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -76,16 +78,27 @@ export default function DashboardPage() {
     }
 
     fetchDashboardData()
-  }, [dateRange, selectedAccountId])
+  }, [dateRange, selectedAccountId, refreshKey])
 
   const { preferredCurrency, currencySymbol, rates } = useCurrency()
 
   // Get active account starting balance
-  const activeAccount = accounts.find((a) => a.id === selectedAccountId)
-  const startingBalanceRaw = activeAccount ? Number(activeAccount.starting_balance) : 100000
-  const startingBalanceCurrency = activeAccount ? activeAccount.currency : 'INR'
-  const startingBalanceRate = rates[startingBalanceCurrency.toUpperCase()] !== undefined ? rates[startingBalanceCurrency.toUpperCase()] : 1
-  const startingBalance = startingBalanceRaw * startingBalanceRate
+  let startingBalanceRaw = 0
+  let startingBalanceCurrency = preferredCurrency
+  
+  if (selectedAccountId && selectedAccountId !== 'all') {
+    const activeAccount = accounts.find((a) => a.id === selectedAccountId)
+    startingBalanceRaw = activeAccount ? Number(activeAccount.starting_balance) : 0
+    startingBalanceCurrency = activeAccount ? activeAccount.currency : preferredCurrency
+  } else {
+    startingBalanceRaw = accounts.reduce((sum, account) => {
+      const rate = rates[account.currency.toUpperCase()] !== undefined ? rates[account.currency.toUpperCase()] : 1
+      return sum + (Number(account.starting_balance) * rate)
+    }, 0)
+  }
+
+  const startingBalanceRate = (selectedAccountId && selectedAccountId !== 'all') && rates[startingBalanceCurrency.toUpperCase()] !== undefined ? rates[startingBalanceCurrency.toUpperCase()] : 1
+  const startingBalance = (selectedAccountId && selectedAccountId !== 'all') ? startingBalanceRaw * startingBalanceRate : startingBalanceRaw
 
   // Convert closed trades to preferred currency before calculating metrics
   const convertedClosedTrades = closedTrades.map((t) => {
@@ -115,7 +128,16 @@ export default function DashboardPage() {
 
   const metrics = calculateMetrics(convertedClosedTrades, startingBalance)
 
+  const currentBalance = startingBalance + metrics.netPnL
+
   const stats = [
+    { 
+      name: 'Current Balance', 
+      value: formatCurrency(currentBalance, preferredCurrency), 
+      change: `Starting: ${formatCurrency(startingBalance, preferredCurrency)}`, 
+      isPositive: currentBalance >= startingBalance, 
+      icon: Wallet 
+    },
     { 
       name: 'Net P&L', 
       value: formatCurrency(metrics.netPnL, preferredCurrency), 
@@ -160,7 +182,10 @@ export default function DashboardPage() {
             Performance insight based on {metrics.totalTrades} trades
           </p>
         </div>
-        <DateRangeFilter />
+        <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+          <QuickSyncButton onSyncComplete={() => setRefreshKey(prev => prev + 1)} />
+          <DateRangeFilter />
+        </div>
       </div>
 
       {/* Stats Grid */}
@@ -175,7 +200,7 @@ export default function DashboardPage() {
               style={{ 
                 position: 'relative', 
                 overflow: 'hidden',
-                borderLeft: stat.name === 'Net P&L' 
+                borderLeft: (stat.name === 'Net P&L' || stat.name === 'Current Balance')
                   ? `4px solid ${stat.isPositive ? 'var(--success)' : 'var(--danger)'}` 
                   : undefined
               }}
@@ -221,31 +246,9 @@ export default function DashboardPage() {
         <Card style={{ display: 'flex', flexDirection: 'column', padding: '24px' }}>
           <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '20px' }}>Equity Curve (Balance)</h3>
           <div style={{ flex: 1, minHeight: '280px' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={metrics.equityCurve} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="var(--primary)" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
-                <XAxis dataKey="date" stroke="var(--text-muted)" fontSize={11} tickLine={false} tick={{ fontFamily: 'var(--font-mono)' }} />
-                <YAxis 
-                  stroke="var(--text-muted)" 
-                  fontSize={11} 
-                  tickLine={false} 
-                  domain={['dataMin - 1000', 'dataMax + 1000']}
-                  tick={{ fontFamily: 'var(--font-mono)' }}
-                  tickFormatter={(v) => `${currencySymbol}${(v/1000).toFixed(0)}k`}
-                />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-color)', borderRadius: '8px', fontFamily: 'var(--font-mono)', fontSize: '12px' }}
-                  labelStyle={{ color: 'var(--text-secondary)', fontWeight: 600 }}
-                />
-                <Area type="monotone" dataKey="balance" stroke="var(--primary)" strokeWidth={2.5} fillOpacity={1} fill="url(#colorBalance)" />
-              </AreaChart>
-            </ResponsiveContainer>
+            <EquityCurveChart 
+              data={metrics.equityCurve.map(p => ({ time: p.date, value: p.balance }))} 
+            />
           </div>
         </Card>
 

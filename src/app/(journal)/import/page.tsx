@@ -43,7 +43,7 @@ function ImportPageContent() {
   const [toDate, setToDate] = useState(() => new Date().toISOString().split('T')[0])
   const [segmentType, setSegmentType] = useState('0')
   const [exchangeType, setExchangeType] = useState('0')
-  const [syncMode, setSyncMode] = useState('trades')
+  const [syncMode, setSyncMode] = useState('order-history')
 
   useEffect(() => {
     const fetchAccounts = async () => {
@@ -340,6 +340,8 @@ function ImportPageContent() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 }}>Sync Mode</label>
               <select value={syncMode} onChange={(e) => setSyncMode(e.target.value)} style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-surface)' }}>
+                <option value="order-history">Order History (With Time)</option>
+                <option value="todays-orders">Today's Orders</option>
                 <option value="trades">Trade Fills History</option>
                 <option value="pnl">Realised P&L History</option>
                 <option value="positions">Today&apos;s Positions</option>
