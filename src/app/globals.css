@@ -549,3 +549,17 @@ label {
 .ProseMirror ol {
   padding: 0 1rem;
 }
+
+/* Notion Table styling refinements */
+th {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: capitalize; /* Notion headers are capitalize, not uppercase */
+  letter-spacing: 0.03em;
+  padding: 10px 14px;
+}
+
+td {
+  padding: 10px 14px;
+  font-size: 13px;
+}
